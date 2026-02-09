@@ -1,0 +1,13 @@
+SET math TO 123 + 456 * 2
+SET physics TO (789 - 321) / 3.2
+SET chemistry TO 45.67 + 89.01
+SET is_passed TO TRUE AND FALSE OR TRUE
+SET negation_example TO -5 + -3.2
+SET complex_calc TO ( (12 + 34) * (56 - 78) ) / (9 + 0.5)
+
+SET name TO 'Alice'
+SET Age TO 20
+SET is_student TO FALSE
+SET is_adult TO (Age >= 18)
+SET greeting TO 'Hello, ' & name & '! You are ' & Age & ' years old.'
+SET not_student TO NOT is_student

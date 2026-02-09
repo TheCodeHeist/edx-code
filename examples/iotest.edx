@@ -1,0 +1,6 @@
+# This is basic I/O functionality testing for the EDX language
+
+SEND 'Enter an integer: ' TO DISPLAY
+RECEIVE theNumber FROM (INTEGER) KEYBOARD
+
+SEND 'You entered: ' & theNumber TO DISPLAY

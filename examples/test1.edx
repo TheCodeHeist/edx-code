@@ -1,0 +1,9 @@
+# This is a sample code snippet, following the Pearson Edexcel IGCSE Computer Science Pseudocode syntax.
+
+SET PI TO 3.14159
+SET name TO 'John Doe'
+SET yesKey TO 'Y'
+SET noKey TO 'N'
+SET Age TO 16
+SET is_student2223 TO TRUE
+SET grades TO [85, 90, 78, 92]
