@@ -1,0 +1,19 @@
+# Example of Foreach Loop in EDX
+
+SET numbers TO [1, 2, 3, 4, 5]
+SET sum TO 0
+
+FOREACH num FROM numbers DO
+  SET sum TO sum + num
+END FOREACH
+
+SEND sum TO DISPLAY
+
+SET string TO 'Hello'
+SET result TO ''
+
+FOREACH char FROM string DO
+  SET result TO result & char & '-'
+END FOREACH
+
+SEND result TO DISPLAY

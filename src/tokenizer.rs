@@ -1,4 +1,4 @@
-const RESERVED_KEYWORDS: [&str; 21] = [
+const RESERVED_KEYWORDS: [&str; 26] = [
   "SET",
   "TO",
   "IF",
@@ -10,14 +10,19 @@ const RESERVED_KEYWORDS: [&str; 21] = [
   "REPEAT",
   "UNTIL",
   "TIMES",
+  "STEP",
   "FOR",
   "FOREACH",
+  "CONTINUE",
+  "BREAK",
   "FROM",
   "SEND",
   "RECEIVE",
   "READ",
   "WRITE",
+  "CALL",
   "PROCEDURE",
+  "FUNCTION",
   "BEGIN",
   "RETURN",
 ];
@@ -110,7 +115,6 @@ pub enum Token {
   IntegerNumeric(i64),
   Boolean(bool),
   StringLiteral(String),
-  // ArrayLiteral(Vec<Token>),
   Type(String),
   Operator(OperatorType),
   Device(String),
@@ -127,10 +131,6 @@ impl std::fmt::Display for Token {
       Token::IntegerNumeric(value) => write!(f, "{}", value),
       Token::Boolean(value) => write!(f, "{}", value),
       Token::StringLiteral(lit) => write!(f, "\"{}\"", lit),
-      // Token::ArrayLiteral(tokens) => {
-      //   let token_strs: Vec<String> = tokens.iter().map(|t| format!("{}", t)).collect();
-      //   write!(f, "[{}]", token_strs.join(", "))
-      // }
       Token::Operator(op) => write!(f, "{}", op),
       Token::Device(dev) => write!(f, "Device({})", dev),
       Token::Type(ty) => write!(f, "Type({})", ty),
@@ -240,6 +240,9 @@ impl Lexer {
             };
             self.position += 1;
           } else if current_char == '(' {
+            // Similar to the handling of '[', there are two possible interpretations of the '(' character:
+            // 1. The start of a parenthesized expression, e.g. (a + b), in which case we will treat it as an operator token and the parser will handle the nested structure
+            // 2. The start of a function call, e.g. myFunction(a, b), in which case we will also treat it as an operator token and the parser will handle the function call
             self.tokens.push(Token::Operator(OperatorType::LPAREN));
             self.position += 1;
           } else if current_char == ')' {
@@ -249,6 +252,11 @@ impl Lexer {
             self.tokens.push(Token::Operator(OperatorType::COMMA));
             self.position += 1;
           } else if current_char == '[' {
+            // There are to possible interpretations of the '[' character:
+            // 1. The start of an array literal, e.g. [1, 2, 3], or [[1, 2], [3, 4]]
+            //    In this case, we will parse the entire array literal as a single token, and the parser will handle the nested structure
+            // 2. The start of an array access, e.g. myArray[1]
+            //    In this case, we will treat the '[' as an operator token, and the parser will handle the array access
             self.tokens.push(Token::Operator(OperatorType::LBRACKET));
             self.position += 1;
           } else if current_char == ']' {
@@ -351,6 +359,19 @@ impl Lexer {
     } else {
       None
     }
+  }
+
+  #[allow(dead_code)]
+  fn peek_next_non_whitespace_char(&self) -> Option<char> {
+    let mut pos = self.position + 1;
+    while pos < self.source.len() {
+      let ch = self.source.chars().nth(pos).unwrap();
+      if !ch.is_whitespace() {
+        return Some(ch);
+      }
+      pos += 1;
+    }
+    None
   }
 
   pub fn next_token(&mut self) -> Token {

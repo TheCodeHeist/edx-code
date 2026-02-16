@@ -1,0 +1,9 @@
+# Example of a Count-controlled loop in EDX
+
+SET i TO 0
+SET n TO 5
+
+REPEAT n TIMES
+  SEND i TO DISPLAY
+  SET i TO i + 1
+END REPEAT

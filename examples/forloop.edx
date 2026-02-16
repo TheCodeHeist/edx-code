@@ -1,0 +1,16 @@
+# Example of For Loop in EDX
+
+SET sum TO 0
+FOR i FROM 1 TO 10 DO
+  SET sum TO sum + i
+END FOR
+
+# Step is optional, defaults to 1
+
+SET product TO 1
+FOR j FROM 1 TO 5 STEP 2 DO
+  SET product TO product * j
+END FOR
+
+SEND sum TO DISPLAY
+SEND product TO DISPLAY

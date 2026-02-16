@@ -1,0 +1,26 @@
+# Example function definition and call in EDX.
+
+FUNCTION CalculateArea (radius)
+BEGIN FUNCTION
+  SET area TO 3.14 * radius^2
+  RETURN area
+END FUNCTION
+
+SET r TO 5
+SET area TO CalculateArea(r)
+SEND 'Area = ' & area TO DISPLAY
+
+FUNCTION Factorial (n)
+BEGIN FUNCTION
+  IF n = 0 THEN
+    RETURN 1
+  ELSE
+    RETURN n * Factorial(n - 1)
+  END IF
+END FUNCTION
+
+SET num TO 3
+SET result TO Factorial(10)
+SEND 'Factorial of ' & num & ' is ' & result TO DISPLAY
+
+

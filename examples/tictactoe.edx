@@ -1,0 +1,103 @@
+# This is a simple implementation of a Tic Tac Toe game in EDX. The game is played on a 3x3 grid, and players take turns marking their symbols (X or O) in the empty spaces. The first player to get three of their symbols in a row (horizontally, vertically, or diagonally) wins the game.
+
+SEND '+------------------------+' TO DISPLAY
+SEND '| Welcome to Tic Tac Toe |' TO DISPLAY
+SEND '+------------------------+' TO DISPLAY
+
+# Initialize the game board
+SET board TO [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']]
+
+# Procedure to display the game board
+PROCEDURE display_board ()
+BEGIN PROCEDURE
+  FOREACH row FROM board DO
+    SET row_string TO ''
+    FOREACH cell FROM row DO
+      SET row_string TO row_string & cell & ' '
+    END FOREACH
+
+    SEND row_string TO DISPLAY
+  END FOREACH
+END PROCEDURE
+
+# Function to check for a win
+FUNCTION check_win ()
+BEGIN FUNCTION
+  # Check rows
+  FOREACH row FROM board DO
+    IF row[0] = row[1] AND row[1] = row[2] THEN
+      RETURN row[0]
+    END IF
+  END FOREACH
+  # Check columns
+  FOR i FROM 0 TO 2 DO
+    IF board[0][i] = board[1][i] AND board[1][i] = board[2][i] THEN
+      RETURN board[0][i]
+    END IF
+  END FOR
+  # Check diagonals
+  IF board[0][0] = board[1][1] AND board[1][1] = board[2][2] THEN
+    RETURN board[0][0]
+  END IF
+  IF board[0][2] = board[1][1] AND board[1][1] = board[2][0] THEN
+    RETURN board[0][2]
+  END IF
+  RETURN FALSE
+END FUNCTION
+
+# Function to check for a draw
+FUNCTION check_draw ()
+BEGIN FUNCTION
+  FOREACH row FROM board DO
+    FOREACH cell FROM row DO
+      IF cell <> 'X' AND cell <> 'O' THEN
+        RETURN FALSE
+      END IF
+    END FOREACH
+  END FOREACH
+  RETURN TRUE
+END FUNCTION
+
+# Main game loop
+SET current_player TO 'X'
+WHILE TRUE DO
+  CALL display_board ()
+  SEND 'Player ' & current_player & ', enter your move (1-9): ' TO DISPLAY
+  RECEIVE move FROM (INTEGER) KEYBOARD
+
+  # Validate the move
+  IF move < 1 OR move > 9 THEN
+    SEND 'Invalid move. Please try again.' TO DISPLAY
+    CONTINUE
+  END IF
+
+  # Update the board
+  SET row TO (move - 1) DIV 3
+  SET col TO (move - 1) MOD 3
+  IF board[row][col] = 'X' OR board[row][col] = 'O' THEN
+    SEND 'Cell already occupied. Please try again.' TO DISPLAY
+    CONTINUE
+  END IF
+  SET board[row, col] TO current_player
+  # Check for a win
+
+  IF check_win () THEN
+    CALL display_board ()
+    SEND 'Player ' & current_player & ' wins!' TO DISPLAY
+    BREAK
+  END IF
+
+  # Check for a draw
+  IF check_draw () THEN
+    CALL display_board ()
+    SEND 'Game is a draw!' TO DISPLAY
+    BREAK
+  END IF
+
+  # Switch player
+  IF current_player = 'X' THEN
+    SET current_player TO 'O'
+  ELSE
+    SET current_player TO 'X'
+  END IF
+END WHILE

@@ -1,0 +1,25 @@
+# Example procedure declaration and call in EDX
+
+PROCEDURE CalculateAverage (Mark1, Mark2, Mark3)
+BEGIN PROCEDURE
+  SET Avg TO (Mark1 + Mark2 + Mark3) / 3
+  SEND Avg TO DISPLAY
+END PROCEDURE
+
+PROCEDURE ShowResults (Mark1, Mark2, Mark3)
+BEGIN PROCEDURE
+  SET Avg TO (Mark1 + Mark2 + Mark3) / 3
+  
+  IF Avg >= 90 THEN
+    SEND 'Excellent' TO DISPLAY
+  ELSE 
+    IF Avg >= 75 THEN
+      SEND 'Good' TO DISPLAY
+    ELSE
+      SEND 'Needs Improvement' TO DISPLAY
+    END IF
+  END IF
+END PROCEDURE
+
+CALL CalculateAverage (85, 90, 95)
+CALL ShowResults (40, 90, 2)

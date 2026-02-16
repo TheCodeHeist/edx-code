@@ -1,0 +1,8 @@
+# Example for Post-condition REPEAT loop in EDX
+
+SET x TO 0
+
+REPEAT
+  SEND x TO DISPLAY
+  SET x TO x + 1
+UNTIL x >= 5

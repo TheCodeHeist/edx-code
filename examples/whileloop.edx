@@ -1,0 +1,8 @@
+# While loop example
+
+SET theNumber TO 75
+
+WHILE (theNumber > 0) DO
+  SEND 'theNumber is: ' & theNumber TO DISPLAY
+  SET theNumber TO (theNumber - 15)
+END WHILE

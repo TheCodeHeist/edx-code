@@ -1,0 +1,12 @@
+SEND 'Enter an integer: ' TO DISPLAY
+RECEIVE theNumber FROM (INTEGER) KEYBOARD
+
+IF (theNumber < 40) THEN
+  SEND 'Low range' TO DISPLAY
+ELSE
+  IF (theNumber < 70) THEN
+    SEND 'Middle range' TO DISPLAY
+  ELSE
+    SEND 'High range' TO DISPLAY
+  END IF
+END IF
