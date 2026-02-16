@@ -1,12 +1,14 @@
+mod error;
 mod parser;
 mod runtime;
 mod tokenizer;
 
+use miette::Result;
 use parser::Parser;
 use runtime::Runtime;
 use tokenizer::Lexer;
 
-fn main() {
+fn main() -> Result<()> {
   // Getting source code from a file in the arguments
   let args: Vec<String> = std::env::args().collect();
   if args.len() < 2 {
@@ -20,20 +22,22 @@ fn main() {
 
   // let source_code = String::from("SET x TO 10 IF x THEN WRITE 'Hello' END IF");
 
-  let mut lexer = Lexer::new(source_code);
-  lexer.tokenize().unwrap();
+  let mut lexer = Lexer::new(filename.to_string(), source_code);
+  lexer.tokenize()?;
 
   // for token in &lexer.tokens {
   //   println!("Token: {}", token);
   // }
 
   let mut parser = Parser::new(lexer);
-  parser.parse().unwrap();
+  parser.parse()?;
 
   // println!("{}", parser.pretty_ast());
 
   let mut runtime = Runtime::new(parser.get_ast());
-  runtime.execute().unwrap();
+  runtime.execute()?;
+
+  Ok(())
 }
 
 // #[test]

@@ -1,3 +1,7 @@
+use miette::{NamedSource, Result};
+
+use crate::error::EdxSyntaxError;
+
 const RESERVED_KEYWORDS: [&str; 26] = [
   "SET",
   "TO",
@@ -30,25 +34,6 @@ const RESERVED_KEYWORDS: [&str; 26] = [
 const RESERVED_DEVICES: [&str; 2] = ["KEYBOARD", "DISPLAY"];
 
 const RESERVED_TYPES: [&str; 5] = ["INTEGER", "REAL", "STRING", "BOOLEAN", "CHARACTER"];
-
-#[derive(Debug)]
-pub enum LexerError {
-  UnexpectedCharacter(char, usize),
-  UnterminatedLiteral(usize),
-}
-
-impl std::fmt::Display for LexerError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self {
-      LexerError::UnexpectedCharacter(ch, pos) => {
-        write!(f, "Unexpected character '{}' at position {}", ch, pos)
-      }
-      LexerError::UnterminatedLiteral(pos) => {
-        write!(f, "Unterminated literal starting at position {}", pos)
-      }
-    }
-  }
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum OperatorType {
@@ -148,6 +133,7 @@ pub enum TokenizerState {
 }
 
 pub struct Lexer {
+  filename: String,
   source: String,
   position: usize,
   pub(crate) tokens: Vec<Token>,
@@ -155,8 +141,9 @@ pub struct Lexer {
 }
 
 impl Lexer {
-  pub fn new(source: String) -> Self {
+  pub fn new(filename: String, source: String) -> Self {
     Lexer {
+      filename,
       source,
       position: 0,
       tokens: Vec::new(),
@@ -164,7 +151,7 @@ impl Lexer {
     }
   }
 
-  pub fn tokenize(&mut self) -> Result<(), LexerError> {
+  pub fn tokenize(&mut self) -> Result<()> {
     while self.position < self.source.len() {
       let current_char = self.source.chars().nth(self.position).unwrap();
 
@@ -220,7 +207,14 @@ impl Lexer {
                   match current_char {
                     '<' => self.tokens.push(Token::Operator(OperatorType::LT)),
                     '>' => self.tokens.push(Token::Operator(OperatorType::GT)),
-                    _ => return Err(LexerError::UnexpectedCharacter(current_char, self.position)),
+                    _ => {
+                      Err(EdxSyntaxError {
+                        message: format!("Unexpected character '{}'", current_char),
+                        help: "Sorry bruv, I gave up...".to_string(),
+                        src: NamedSource::new(self.filename.clone(), self.source.clone()),
+                        span: (self.position, 1).into(),
+                      })?;
+                    }
                   };
                   self.position += 1;
                   continue;
@@ -263,7 +257,12 @@ impl Lexer {
             self.tokens.push(Token::Operator(OperatorType::RBRACKET));
             self.position += 1;
           } else {
-            return Err(LexerError::UnexpectedCharacter(current_char, self.position));
+            Err(EdxSyntaxError {
+              message: format!("Unexpected character '{}'", current_char),
+              help: "Sorry bruv, I gave up...".to_string(),
+              src: NamedSource::new(self.filename.clone(), self.source.clone()),
+              span: (self.position, 1).into(),
+            })?;
           }
         }
         TokenizerState::InWord => {
@@ -334,11 +333,26 @@ impl Lexer {
           while self.position < self.source.len()
             && self.source.chars().nth(self.position).unwrap() != '\''
           {
+            // If we reached the a newline before finding a closing quote, it's an error
+            if self.source.chars().nth(self.position).unwrap() == '\n' {
+              Err(EdxSyntaxError {
+                message: "Unterminated string literal".to_string(),
+                help: "I guess you forgot the single quote?".to_string(),
+                src: NamedSource::new(self.filename.clone(), self.source.clone()),
+                span: (start_pos, self.position - start_pos).into(),
+              })?;
+            }
+
             self.position += 1;
           }
 
           if self.position >= self.source.len() {
-            return Err(LexerError::UnterminatedLiteral(start_pos - 1));
+            Err(EdxSyntaxError {
+              message: "Unterminated string literal".to_string(),
+              help: "I guess you forgot the single quote?".to_string(),
+              src: NamedSource::new(self.filename.clone(), self.source.clone()),
+              span: (start_pos, self.position - start_pos).into(),
+            })?;
           }
 
           let literal: String = self.source[start_pos..self.position].to_string();

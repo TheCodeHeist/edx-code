@@ -1,6 +1,11 @@
 use std::collections::HashMap;
 
-use crate::tokenizer::{Lexer, OperatorType, Token};
+use crate::{
+  error::EdxParsingError,
+  tokenizer::{Lexer, OperatorType, Token},
+};
+
+use miette::Result;
 
 #[derive(Clone)]
 pub enum Expression {
@@ -328,7 +333,7 @@ impl Parser {
     self.previous_scope_id
   }
 
-  pub fn parse(&mut self) -> Result<(), String> {
+  pub fn parse(&mut self) -> Result<()> {
     // Plan:
     // by default, there is a main scope with id 0
     // when entering a control flow statement, push a new scope onto the stack and assign it a new id
@@ -350,7 +355,12 @@ impl Parser {
 
             let name = match self.lexer.next_token() {
               Token::Identifier(id) => id,
-              other => return Err(format!("Expected identifier, found {}", other)),
+              other => {
+                Err(EdxParsingError {
+                  message: format!("Expected identifier after SET, found {}", other),
+                  help: "The SET statement is used to declare a variable or assign a value to an array element. Make sure you provide a valid identifier after SET.".to_string(),
+                })?
+              }
             }; // <identifier>
 
             let mut indices = Vec::new();
@@ -368,19 +378,36 @@ impl Parser {
 
                 match self.lexer.next_token() {
                   Token::Operator(OperatorType::COMMA) => {}
-                  other => return Err(format!("Expected ',' or ']', found {}", other)),
+                  other => {
+                    Err(EdxParsingError {
+                      message: format!("Expected ',' or ']' in array index, found {}", other),
+                      help: "When assigning to an array element, you need to provide the index in square brackets. If you have multiple dimensions, separate the indices with commas.".to_string(),
+                    })?;
+                  }
                 }
               }
 
               match self.lexer.next_token() {
                 Token::Operator(OperatorType::RBRACKET) => {}
-                other => return Err(format!("Expected ']', found {}", other)),
+                other => {
+                  Err(EdxParsingError {
+                    message: format!("Expected ']' after array indices, found {}", other),
+                    help:
+                      "Make sure to close the square brackets after providing the array indices."
+                        .to_string(),
+                  })?;
+                }
               } // consume ']'
             }
 
             match self.lexer.next_token() {
               Token::Keyword(to_kw) if to_kw == "TO" => {}
-              other => return Err(format!("Expected 'TO', found {}", other)),
+              other => {
+                Err(EdxParsingError {
+                  message: format!("Expected 'TO' after variable name, found {}", other),
+                  help: "The SET statement requires the keyword 'TO' after the variable name (and optional array indices) to specify the value being assigned.".to_string(),
+                })?;
+              }
             } // consume 'TO'
 
             let value = self.expr_bp(0.0); // <expression>
@@ -409,12 +436,21 @@ impl Parser {
 
             match self.lexer.next_token() {
               Token::Keyword(to_kw) if to_kw == "TO" => {}
-              other => return Err(format!("Expected 'TO', found {}", other)),
+              other => {
+                Err(EdxParsingError {
+                  message: format!("Expected 'TO' after SEND message, found {}", other),
+                  help: "The SEND statement requires the keyword 'TO' after the message expression to specify the device to send to.".to_string(),
+                })?;
+              }
             } // consume 'TO'
 
             let device = match self.lexer.next_token() {
               Token::Device(id) => id,
-              other => return Err(format!("Expected device, found {}", other)),
+              other => 
+                Err(EdxParsingError {
+                message: format!("Expected device after 'TO' in SEND statement, found {}", other),
+                help: "After specifying the message to send and the keyword 'TO', you need to provide a valid device identifier.".to_string(),
+              })?,
             }; // <DEVICE>
 
             self
@@ -430,32 +466,50 @@ impl Parser {
 
             let variable_name = match self.lexer.next_token() {
               Token::Identifier(id) => id,
-              other => return Err(format!("Expected identifier, found {}", other)),
+              other => Err(EdxParsingError {
+                message: format!("Expected identifier after RECEIVE, found {}", other),
+                help: "The RECEIVE statement requires an identifier after the keyword 'RECEIVE' to specify the variable that will store the received value.".to_string(),
+              })?,
             }; // <identifier>
 
             match self.lexer.next_token() {
               Token::Keyword(from_kw) if from_kw == "FROM" => {}
-              other => return Err(format!("Expected 'FROM', found {}", other)),
+              other => Err(EdxParsingError {
+                message: format!("Expected 'FROM' after variable name in RECEIVE statement, found {}", other),
+                help: "After specifying the variable name in a RECEIVE statement, you need to use the keyword 'FROM' to indicate where the input is coming from.".to_string(),
+              })?,
             } // consume 'FROM'
 
             match self.lexer.next_token() {
               Token::Operator(OperatorType::LPAREN) => {}
-              other => return Err(format!("Expected '(', found {}", other)),
+              other => Err(EdxParsingError {
+                message: format!("Expected '(' after 'FROM' in RECEIVE statement, found {}", other),
+                help: "The RECEIVE statement requires the input type to be specified in parentheses after the 'FROM' keyword. Make sure to include the type in parentheses.".to_string(),
+              })?,
             } // consume '('
 
             let input_type = match self.lexer.next_token() {
               Token::Type(ty) => ty,
-              other => return Err(format!("Expected type, found {}", other)),
+              other => Err(EdxParsingError {
+                message: format!("Expected type after '(' in RECEIVE statement, found {}", other),
+                help: "Inside the parentheses after 'FROM' in a RECEIVE statement, you need to specify the type of input expected (e.g., INTEGER, STRING).".to_string(),
+              })?,
             }; // consume <TYPE>
 
             match self.lexer.next_token() {
               Token::Operator(OperatorType::RPAREN) => {}
-              other => return Err(format!("Expected ')', found {}", other)),
+              other => Err(EdxParsingError {
+                message: format!("Expected ')', found {}", other),
+                help: "The closing parenthesis for the input type in a RECEIVE statement is missing.".to_string(),
+              })?,
             } // consume ')'
 
             let device = match self.lexer.next_token() {
               Token::Device(id) => id,
-              other => return Err(format!("Expected device, found {}", other)),
+              other => Err(EdxParsingError {
+                message: format!("Expected device after input type in RECEIVE statement, found {}", other),
+                help: "After specifying the input type in a RECEIVE statement, you must specify the device from which to receive the input.".to_string(),
+              })?,
             }; // <DEVICE>
 
             self
@@ -477,7 +531,10 @@ impl Parser {
 
             match self.lexer.next_token() {
               Token::Keyword(then_kw) if then_kw == "THEN" => {}
-              other => return Err(format!("Expected 'THEN', found {}", other)),
+              other => Err(EdxParsingError {
+                message: format!("Expected 'THEN' after IF condition, found {}", other),
+                help: "The IF statement requires the keyword 'THEN' after the condition expression to indicate the start of the IF body.".to_string(),
+              })?,
             } // consume 'THEN'
 
             // Assign a new scope for the IF body
@@ -507,7 +564,10 @@ impl Parser {
                   .push(ControlState::Else(new_scope_id, if_scope_id));
               }
               _ => {
-                return Err("Mismatched ELSE without IF".to_string());
+                return Err(EdxParsingError {
+                  message: "Mismatched ELSE without IF".to_string(),
+                  help: "An ELSE statement must be directly preceded by an IF statement.".to_string(),
+                })?;
               }
             };
           } else if kw == "WHILE" {
@@ -520,7 +580,10 @@ impl Parser {
 
             match self.lexer.next_token() {
               Token::Keyword(do_kw) if do_kw == "DO" => {}
-              other => return Err(format!("Expected 'DO', found {}", other)),
+              other => Err(EdxParsingError {
+                message: format!("Expected 'DO' after WHILE condition, found {}", other),
+                help: "The WHILE statement requires the keyword 'DO' after the condition expression to indicate the start of the loop body.".to_string(),
+              })?,
             } // consume 'DO'
 
             // Assign a new scope for the WHILE body
@@ -548,7 +611,10 @@ impl Parser {
 
               match self.lexer.next_token() {
                 Token::Keyword(times_kw) if times_kw == "TIMES" => {}
-                other => return Err(format!("Expected 'TIMES', found {}", other)),
+                other => return Err(EdxParsingError {
+                  message: format!("Expected 'TIMES' after count expression in REPEAT statement, found {}", other),
+                  help: "When using a count-controlled loop with REPEAT, you need to specify the number of iterations followed by the keyword 'TIMES'.".to_string(),
+                })?,
               } // consume 'TIMES'
 
               // Assign a new scope for the loop body
@@ -596,7 +662,10 @@ impl Parser {
                   .push(Node::PostConditionalLoop { body, condition });
               }
               _ => {
-                return Err("Mismatched UNTIL without REPEAT".to_string());
+                return Err(EdxParsingError {
+                  message: "Mismatched UNTIL without REPEAT".to_string(),
+                  help: "An UNTIL statement must be used to close a post-conditioned REPEAT loop.".to_string(),
+                })?;
               }
             }
           } else if kw == "FOR" {
@@ -608,19 +677,28 @@ impl Parser {
 
             let variable_name = match self.lexer.next_token() {
               Token::Identifier(id) => id,
-              other => return Err(format!("Expected identifier, found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected identifier after FOR, found {}", other),
+                help: "The FOR loop requires a loop variable name immediately after the 'FOR' keyword.".to_string(),
+              })?,
             }; // <identifier>
 
             match self.lexer.next_token() {
               Token::Keyword(from_kw) if from_kw == "FROM" => {}
-              other => return Err(format!("Expected 'FROM', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected 'FROM', found {}", other),
+                help: "The FOR loop requires the keyword 'FROM' after the loop variable name.".to_string(),
+              })?,
             } // consume 'FROM'
 
             let start = self.expr_bp(0.0); // <expression>
 
             match self.lexer.next_token() {
               Token::Keyword(to_kw) if to_kw == "TO" => {}
-              other => return Err(format!("Expected 'TO', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected 'TO', found {}", other),
+                help: "The FOR loop requires the keyword 'TO' after the start expression to specify the end expression.".to_string(),
+              })?,
             } // consume 'TO'
 
             let end = self.expr_bp(0.0); // <expression>
@@ -636,7 +714,10 @@ impl Parser {
 
             match self.lexer.next_token() {
               Token::Keyword(do_kw) if do_kw == "DO" => {}
-              other => return Err(format!("Expected 'DO', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected 'DO', found {}", other),
+                help: "The FOR loop requires the keyword 'DO' after the end (and optional step) expression to indicate the start of the loop body.".to_string(),
+              })?,
             } // consume 'DO'
 
             // Assign a new scope for the loop body
@@ -659,19 +740,28 @@ impl Parser {
 
             let variable_name = match self.lexer.next_token() {
               Token::Identifier(id) => id,
-              other => return Err(format!("Expected identifier, found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected identifier after FOREACH, found {}", other),
+                help: "The FOREACH loop requires a loop variable name immediately after the 'FOREACH' keyword.".to_string(),
+              })?,
             }; // <identifier>
 
             match self.lexer.next_token() {
               Token::Keyword(from_kw) if from_kw == "FROM" => {}
-              other => return Err(format!("Expected 'FROM', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected 'FROM', found {}", other),
+                help: "The FOREACH loop requires the keyword 'FROM' after the loop variable name.".to_string(),
+              })?,
             } // consume 'FROM'
 
             let iterable = self.expr_bp(0.0); // <expression>
 
             match self.lexer.next_token() {
               Token::Keyword(do_kw) if do_kw == "DO" => {}
-              other => return Err(format!("Expected 'DO', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected 'DO', found {}", other),
+                help: "The FOREACH loop requires the keyword 'DO' after the iterable expression to indicate the start of the loop body.".to_string(),
+              })?,
             } // consume 'DO'
 
             // Assign a new scope for the loop body
@@ -713,21 +803,28 @@ impl Parser {
             // FIRST CHECK IF THIS IS CALLED IN THE PROGRAM SCOPE, IF NOT, THE PROCEDURE DECLARATION IS INVALID
 
             if self.current_scope != 0 {
-              return Err(
-                "Procedure declarations are only allowed in the main program scope".to_string(),
-              );
+              Err(EdxParsingError {
+                message: "Procedure declarations are only allowed in the main program scope".to_string(),
+                help: "Procedure declarations must be at the top level of the program, not nested within other scopes.".to_string(),
+              })?;
             }
 
             self.lexer.next_token(); // consume 'PROCEDURE'
 
             let name = match self.lexer.next_token() {
               Token::Identifier(id) => id,
-              other => return Err(format!("Expected identifier, found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected identifier, found {}", other),
+                help: "After the 'PROCEDURE' keyword, you need to provide a valid identifier for the procedure name.".to_string(),
+              })?,
             }; // <identifier>
 
             match self.lexer.next_token() {
               Token::Operator(OperatorType::LPAREN) => {}
-              other => return Err(format!("Expected '(', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected '(', found {}", other),
+                help: "After the procedure name, you must specify the parameter list in parentheses.".to_string(),
+              })?,
             } // consume '('
 
             let mut parameters = Vec::new();
@@ -736,7 +833,10 @@ impl Parser {
               loop {
                 let param = match self.lexer.next_token() {
                   Token::Identifier(id) => id,
-                  other => return Err(format!("Expected identifier, found {}", other)),
+                  other => return Err(EdxParsingError {
+                    message: format!("Expected identifier in parameter list, found {}", other),
+                    help: "The parameter list for a procedure declaration must consist of valid identifiers separated by commas.".to_string(),
+                  })?,
                 }; // <identifier>
                 parameters.push(param);
 
@@ -746,24 +846,36 @@ impl Parser {
 
                 match self.lexer.next_token() {
                   Token::Operator(OperatorType::COMMA) => {}
-                  other => return Err(format!("Expected ',' or ')', found {}", other)),
+                  other => return Err(EdxParsingError {
+                    message: format!("Expected ',' or ')', found {}", other),
+                    help: "In the parameter list, parameters must be separated by commas, and the list must be closed with a parenthesis.".to_string(),
+                  })?,
                 }
               }
             }
 
             match self.lexer.next_token() {
               Token::Operator(OperatorType::RPAREN) => {}
-              other => return Err(format!("Expected ')', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected ')', found {}", other),
+                help: "After listing the parameters for a procedure declaration, make sure to close the parenthesis.".to_string(),
+              })?,
             } // consume ')'
 
             match self.lexer.next_token() {
               Token::Keyword(begin_kw) if begin_kw == "BEGIN" => {}
-              other => return Err(format!("Expected 'BEGIN', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected 'BEGIN', found {}", other),
+                help: "After the procedure declaration header, you need to use the keyword 'BEGIN' to indicate the start of the procedure body.".to_string(),
+              })?,
             } // consume 'BEGIN'
 
             match self.lexer.next_token() {
               Token::Keyword(proc_kw) if proc_kw == "PROCEDURE" => {}
-              other => return Err(format!("Expected 'PROCEDURE', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected 'PROCEDURE', found {}", other),
+                help: "After the 'BEGIN' keyword in a procedure declaration, you must specify the procedure name.".to_string(),
+              })?,
             } // consume 'PROCEDURE'
 
             // Assign a new scope for the procedure body
@@ -792,10 +904,10 @@ impl Parser {
                 .unwrap()
                 .push(Node::ProcedureCall { name, args });
             } else {
-              return Err(format!(
-                "Expected procedure call expression after CALL, found {}",
-                subprogram_call_expr
-              ));
+              return Err(EdxParsingError {
+                message: format!("Expected procedure call expression after CALL, found {}", subprogram_call_expr),
+                help: "After the 'CALL' keyword, you must specify a valid procedure call expression.".to_string(),
+              })?;
             }
           } else if kw == "FUNCTION" {
             // Function declaration
@@ -804,21 +916,28 @@ impl Parser {
             // FIRST CHECK IF THIS IS CALLED IN THE PROGRAM SCOPE, IF NOT, THE FUNCTION DECLARATION IS INVALID
 
             if self.current_scope != 0 {
-              return Err(
-                "Function declarations are only allowed in the main program scope".to_string(),
-              );
+              return Err(EdxParsingError {
+                message: "Function declarations are only allowed in the main program scope".to_string(),
+                help: "Function declarations must be at the top level of the program.".to_string(),
+              })?;
             }
 
             self.lexer.next_token(); // consume 'FUNCTION'
 
             let name = match self.lexer.next_token() {
               Token::Identifier(id) => id,
-              other => return Err(format!("Expected identifier, found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected identifier, found {}", other),
+                help: "After the 'FUNCTION' keyword, you must specify a valid function name.".to_string(),
+              })?,
             }; // <identifier>
 
             match self.lexer.next_token() {
               Token::Operator(OperatorType::LPAREN) => {}
-              other => return Err(format!("Expected '(', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected '(', found {}", other),
+                help: "After the function name, you must specify the parameter list in parentheses.".to_string(),
+              })?,
             } // consume '('
 
             let mut parameters = Vec::new();
@@ -827,7 +946,10 @@ impl Parser {
               loop {
                 let param = match self.lexer.next_token() {
                   Token::Identifier(id) => id,
-                  other => return Err(format!("Expected identifier, found {}", other)),
+                  other => return Err(EdxParsingError {
+                    message: format!("Expected identifier in parameter list, found {}", other),
+                    help: "The parameter list for a function declaration must consist of valid identifiers separated by commas.".to_string(),
+                  })?,
                 }; // <identifier>
                 parameters.push(param);
 
@@ -837,24 +959,36 @@ impl Parser {
 
                 match self.lexer.next_token() {
                   Token::Operator(OperatorType::COMMA) => {}
-                  other => return Err(format!("Expected ',' or ')', found {}", other)),
+                  other => return Err(EdxParsingError {
+                    message: format!("Expected ',' or ')', found {}", other),
+                    help: "In the parameter list, parameters must be separated by commas, and the list must be closed with a parenthesis.".to_string(),
+                  })?,
                 }
               }
             }
 
             match self.lexer.next_token() {
               Token::Operator(OperatorType::RPAREN) => {}
-              other => return Err(format!("Expected ')', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected ')', found {}", other),
+                help: "The function parameter list must be closed with a right parenthesis.".to_string(),
+              })?,
             } // consume ')'
 
             match self.lexer.next_token() {
               Token::Keyword(begin_kw) if begin_kw == "BEGIN" => {}
-              other => return Err(format!("Expected 'BEGIN', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected 'BEGIN', found {}", other),
+                help: "After the function declaration header, you need to use the keyword 'BEGIN' to indicate the start of the function body.".to_string(),
+              })?,
             } // consume 'BEGIN'
 
             match self.lexer.next_token() {
               Token::Keyword(func_kw) if func_kw == "FUNCTION" => {}
-              other => return Err(format!("Expected 'FUNCTION', found {}", other)),
+              other => return Err(EdxParsingError {
+                message: format!("Expected 'FUNCTION', found {}", other),
+                help: "After the 'BEGIN' keyword, you must specify the function body with a 'FUNCTION' keyword.".to_string(),
+              })?,
             } // consume 'FUNCTION'
 
             // Assign a new scope for the function body
@@ -919,10 +1053,13 @@ impl Parser {
                           (parent_scope_id, condition)
                         }
                         _ => {
-                          return Err(
+                          return Err(EdxParsingError {
+                             message:
                             "Expected control flow stack to have an If state before an Else state"
                               .to_string(),
-                          );
+                            help: "This error indicates an issue with the internal state of the parser. Please report this to the developers.".to_string(),
+                            }
+                          )?;
                         }
                       };
                       self.current_scope = parent_scope_id;
@@ -941,7 +1078,10 @@ impl Parser {
                         });
                     }
                     _ => {
-                      return Err("Mismatched END IF without IF".to_string());
+                      return Err(EdxParsingError {
+                        message: "Mismatched END IF without IF".to_string(),
+                        help: "An END IF statement must be used to close an IF statement.".to_string(),
+                      })?;
                     }
                   }
                 } else if end_kw == "WHILE" {
@@ -959,7 +1099,10 @@ impl Parser {
                         .push(Node::WhileLoop { condition, body });
                     }
                     _ => {
-                      return Err("Mismatched END WHILE without WHILE".to_string());
+                      return Err(EdxParsingError {
+                        message: "Mismatched END WHILE without WHILE".to_string(),
+                        help: "An END WHILE statement must be used to close a WHILE loop.".to_string(),
+                      })?;
                     }
                   }
                 } else if end_kw == "REPEAT" {
@@ -981,7 +1124,10 @@ impl Parser {
                         .push(Node::CountControlledLoop { count, body });
                     }
                     _ => {
-                      return Err("Mismatched END REPEAT without REPEAT".to_string());
+                      return Err(EdxParsingError {
+                        message: "Mismatched END REPEAT without Count-controlled REPEAT".to_string(),
+                        help: "An END REPEAT statement must be used to close a count-controlled REPEAT loop. Post-conditioned REPEAT loops should be closed with an UNTIL statement.".to_string(),
+                      })?;
                     }
                   }
                 } else if end_kw == "FOR" {
@@ -1012,7 +1158,10 @@ impl Parser {
                         });
                     }
                     _ => {
-                      return Err("Mismatched END FOR without FOR".to_string());
+                      return Err(EdxParsingError {
+                        message: "Mismatched END FOR without FOR".to_string(),
+                        help: "An END FOR statement must be used to close a FOR loop.".to_string(),
+                      })?;
                     }
                   }
                 } else if end_kw == "FOREACH" {
@@ -1039,7 +1188,10 @@ impl Parser {
                         });
                     }
                     _ => {
-                      return Err("Mismatched END FOREACH without FOREACH".to_string());
+                      return Err(EdxParsingError {
+                        message: "Mismatched END FOREACH without FOREACH".to_string(),
+                        help: "An END FOREACH statement must be used to close a FOREACH loop.".to_string(),
+                      })?;
                     }
                   }
                 } else if end_kw == "PROCEDURE" {
@@ -1059,7 +1211,10 @@ impl Parser {
                       );
                     }
                     _ => {
-                      return Err("Mismatched END PROCEDURE without PROCEDURE".to_string());
+                      return Err(EdxParsingError {
+                        message: "Mismatched END PROCEDURE without PROCEDURE".to_string(),
+                        help: "An END PROCEDURE statement must be used to close a procedure declaration.".to_string(),
+                      })?;
                     }
                   }
                 } else if end_kw == "FUNCTION" {
@@ -1079,28 +1234,37 @@ impl Parser {
                       );
                     }
                     _ => {
-                      return Err("Mismatched END FUNCTION without FUNCTION".to_string());
+                      return Err(EdxParsingError {
+                        message: "Mismatched END FUNCTION without FUNCTION".to_string(),
+                        help: "An END FUNCTION statement must be used to close a function declaration.".to_string(),
+                      })?;
                     }
                   }
                 }
               }
               other => {
-                return Err(format!(
-                  "Expected control flow keyword after END, found {}",
-                  other
-                ));
+                return Err(EdxParsingError {
+                  message: format!("Expected control flow keyword after END, found {}", other),
+                  help: "An END statement must be followed by a matching control flow keyword.".to_string(),
+                })?;
               }
             }
           }
         }
         other => {
-          return Err(format!("Unexpected token: {}", other));
+          return Err(EdxParsingError {
+            message: format!("Unexpected token: {}", other),
+            help: "This error indicates an issue with the internal state of the parser. Please report this to the developers.".to_string(),
+          })?;
         }
       }
     }
 
     if self.control_flow_stack.len() != 1 {
-      return Err("Unclosed control flow statements".to_string());
+      return Err(EdxParsingError {
+        message: "Unclosed control flow statements at end of program".to_string(),
+        help: "Make sure all control flow statements (IF, WHILE, REPEAT, FOR, FOREACH, PROCEDURE, FUNCTION) are properly closed with their corresponding END statements (or UNTIL for post-conditioned REPEAT loops).".to_string(),
+      })?;
     }
 
     self.ast = Node::Program {

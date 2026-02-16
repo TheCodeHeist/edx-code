@@ -1,0 +1,3 @@
+SEND hey TO DISPLAY
+SET divideNow TO 10 / 0
+

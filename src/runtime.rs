@@ -4,9 +4,12 @@ use std::{
 };
 
 use crate::{
+  error::EdxRuntimeError,
   parser::{Expression, Node},
   tokenizer::{OperatorType, Token},
 };
+
+use miette::Result;
 
 #[derive(Clone)]
 pub enum Reference {
@@ -44,14 +47,20 @@ impl Reference {
     }
   }
 
-  pub fn try_into_bool(&self) -> Result<bool, String> {
+  pub fn try_into_bool(&self) -> Result<bool> {
     match self {
       Reference::BoolVar(b) => Ok(*b),
       Reference::IntVar(v) => Ok(*v != 0),
       Reference::RealVar(v) => Ok(*v != 0.0),
       Reference::StrVar(v) => Ok(!v.is_empty()),
       Reference::ArrayVar(v) => Ok(!v.is_empty()),
-      _ => Err(format!("Cannot convert {} to boolean", self.type_name())),
+      _ => Err(EdxRuntimeError {
+        message: format!(
+          "Cannot convert type '{}' to boolean for condition evaluation",
+          self.type_name()
+        ),
+        help: "Ensure the expression in the condition evaluates to a boolean or a type that can be coerced to boolean".into(),
+      }.into())
     }
   }
 }
@@ -97,7 +106,7 @@ impl Runtime {
     }
   }
 
-  pub fn execute(&mut self) -> Result<(), String> {
+  pub fn execute(&mut self) -> Result<()> {
     // Using DFS to traverse and execute the AST
     let body = match self.ast.clone() {
       Node::Program { body } => {
@@ -109,12 +118,7 @@ impl Runtime {
     };
 
     for node in body {
-      match self.execute_node(node.clone()) {
-        Ok(_) => {}
-        Err(err) => {
-          return Err(format!("Error executing node {}: {}", node, err));
-        }
-      }
+      self.execute_node(node.clone())?;
     }
 
     // println!("Execution completed.");
@@ -124,7 +128,7 @@ impl Runtime {
     Ok(())
   }
 
-  fn execute_node(&mut self, node: Node) -> Result<Option<Reference>, String> {
+  fn execute_node(&mut self, node: Node) -> Result<Option<Reference>> {
     // This function executes a single node and returns an optional Reference for nodes that produce a value (like function calls)
     // println!("Executing node: {}", node); // Debug print to trace execution
 
@@ -153,14 +157,22 @@ impl Runtime {
           Some(var) => var.clone(),
           None => match self.global_vars.get(&array_name) {
             Some(var) => var.clone(),
-            None => return Err(format!("Undefined array variable: {}", array_name)),
+            None => {
+              return Err(EdxRuntimeError {
+                message: format!("Undefined variable: {}", array_name),
+                help: "Make sure the variable is declared before it is used.".into(),
+              })?;
+            }
           },
         };
 
         // Ensure it's an array variable
         let mut array = match array_ref {
           Reference::ArrayVar(arr) => arr,
-          _ => return Err(format!("Variable '{}' is not an array", array_name)),
+          _ => return Err(EdxRuntimeError {
+            message: format!("Variable '{}' is not an array", array_name),
+            help: "Make sure you are using the correct variable name and that it is declared as an array.".into(),
+          })?,
         };
 
         // Evaluate index expressions
@@ -170,15 +182,18 @@ impl Runtime {
           let idx_int = match idx_value {
             Reference::IntVar(v) => v,
             _ => {
-              return Err(format!(
-                "Array index must evaluate to an integer, got {}",
-                idx_value
-              ));
+              return Err(EdxRuntimeError {
+                message: format!("Array index must evaluate to an integer, got {}", idx_value),
+                help: "Make sure the array index is an integer.".into(),
+              })?;
             }
           };
 
           if idx_int < 0 || (idx_int as usize) >= current_array.len() {
-            return Err(format!("Array index out of bounds: {}", idx_int));
+            return Err(EdxRuntimeError {
+              message: format!("Array index out of bounds: {}", idx_int),
+              help: "Make sure the array index is within the bounds of the array.".into(),
+            })?;
           }
 
           if i == index.len() - 1 {
@@ -194,11 +209,13 @@ impl Runtime {
                 };
               }
               _ => {
-                return Err(format!(
-                  "Expected nested array at index {}, got {}",
-                  idx_int,
-                  current_array[idx_int as usize].type_name()
-                ));
+                return Err(EdxRuntimeError {
+                  message: format!(
+                    "Expected array at index {} but found {}",
+                    idx_int, current_array[idx_int as usize].type_name()
+                  ),
+                  help: "Make sure all intermediate indices in a multi-dimensional array assignment refer to arrays.".into(),
+                })?;
               }
             }
           }
@@ -257,7 +274,10 @@ impl Runtime {
             Reference::ControlContinuation => println!("ControlContinuation"),
             Reference::ControlBreak => println!("ControlBreak"),
           },
-          _ => return Err(format!("Unsupported device: {}", device)),
+          _ => return Err(EdxRuntimeError {
+            message: format!("Unsupported device: {}", device),
+            help: "Currently, only the DISPLAY device is supported for output. Make sure you are using 'DISPLAY' as the device in your SEND statement.".into(),
+          })?,
         };
       }
       Node::ReceiveIO {
@@ -277,7 +297,10 @@ impl Runtime {
               let parsed_value = match input.parse::<i64>() {
                 Ok(v) => v,
                 Err(_) => {
-                  return Err(format!("Invalid input for INTEGER type: {}", input));
+                  return Err(EdxRuntimeError {
+                    message: format!("Invalid input for INTEGER type: {}", input),
+                    help: "Ensure you are entering a valid integer value.".into(),
+                  })?;
                 }
               };
               Reference::IntVar(parsed_value)
@@ -286,13 +309,19 @@ impl Runtime {
               let parsed_value = match input.parse::<f64>() {
                 Ok(v) => v,
                 Err(_) => {
-                  return Err(format!("Invalid input for REAL type: {}", input));
+                  return Err(EdxRuntimeError {
+                    message: format!("Invalid input for REAL type: {}", input),
+                    help: "Ensure you are entering a valid real number.".into(),
+                  })?;
                 }
               };
               Reference::RealVar(parsed_value)
             }
             "STRING" => Reference::StrVar(input.to_string()),
-            _ => return Err(format!("Unsupported input type: {}", input_type)),
+            _ => return Err(EdxRuntimeError {
+              message: format!("Unsupported input type: {}", input_type),
+              help: "Supported input types are INTEGER, REAL, and STRING. Make sure you are using one of these types in your RECEIVE statement.".into(),
+            })?,
           };
 
           match self.execution_stack.last() {
@@ -300,7 +329,10 @@ impl Runtime {
             _ => self.local_vars.insert(variable_name, value),
           };
         }
-        _ => return Err(format!("Unsupported device: {}", device)),
+        _ => return Err(EdxRuntimeError {
+          message: format!("Unsupported device: {}", device),
+          help: "Currently, only the KEYBOARD device is supported for input. Make sure you are using 'KEYBOARD' as the device in your RECEIVE statement.".into(),
+        })?,
       },
       Node::IfStatement {
         condition,
@@ -319,7 +351,7 @@ impl Runtime {
                     return Ok(val); // Return value from if body to caller
                   }
                 }
-                Err(err) => return Err(format!("Error executing if body: {}", err)),
+                Err(err) => return Err(err)?,
               }
             }
           }
@@ -332,16 +364,16 @@ impl Runtime {
                       return Ok(val); // Return value from else body to caller
                     }
                   }
-                  Err(err) => return Err(format!("Error executing else body: {}", err)),
+                  Err(err) => return Err(err)?,
                 }
               }
             }
           }
           Err(e) => {
-            return Err(format!(
-              "Condition expression did not evaluate to a boolean: {}",
-              e
-            ));
+            return Err(EdxRuntimeError {
+              message: format!("Condition expression did not evaluate to a boolean: {}", e),
+              help: "Ensure the condition evaluates to a boolean value (TRUE or FALSE).".into(),
+            })?;
           }
         }
       }
@@ -354,32 +386,32 @@ impl Runtime {
         match condition_value.try_into_bool() {
           Ok(true) => {
             for stmt in body.clone() {
-              match self.execute_node(stmt) {
-                Ok(val) => {
+              let stmt_result = self.execute_node(stmt.clone())?;
+              match stmt_result {
+                Some(val) => {
                   // Check for control flow signals (continue/break) from the loop body execution, otherswise return any value produced by the loop body to the caller
                   match val {
-                    Some(Reference::ControlBreak) => {
+                    Reference::ControlBreak => {
                       need_to_break = true;
                       break; // Break out of the loop entirely
                     }
-                    Some(Reference::ControlContinuation) => {
+                    Reference::ControlContinuation => {
                       need_to_continue = true;
                       break; // Skip to the next iteration of the loop
                     }
-                    Some(other_val) => return Ok(Some(other_val)), // Return value from loop body to caller
-                    None => {} // No value produced, continue execution
+                    other_val => return Ok(Some(other_val)), // Return value from loop body to caller
                   }
                 }
-                Err(err) => return Err(format!("Error executing while loop body: {}", err)),
+                None => continue,
               }
             }
           }
           Ok(false) => break, // Condition is false, exit the while loop
           Err(e) => {
-            return Err(format!(
-              "Condition expression did not evaluate to a boolean: {}",
-              e
-            ));
+            return Err(EdxRuntimeError {
+              message: format!("Condition expression did not evaluate to a boolean: {}", e),
+              help: "Ensure the condition evaluates to a boolean value (TRUE or FALSE).".into(),
+            })?;
           }
         }
 
@@ -392,18 +424,12 @@ impl Runtime {
       },
       Node::PostConditionalLoop { body, condition } => loop {
         for stmt in body.clone() {
-          match self.execute_node(stmt) {
-            Ok(val) => {
-              if val.is_some() {
-                return Ok(val); // Return value from loop body to caller
-              }
+          let stmt_result = self.execute_node(stmt.clone())?;
+          match stmt_result {
+            Some(val) => {
+              return Ok(Some(val)); // Return value from loop body to caller
             }
-            Err(err) => {
-              return Err(format!(
-                "Error executing post-conditional loop body: {}",
-                err
-              ));
-            }
+            None => continue,
           }
         }
 
@@ -413,10 +439,10 @@ impl Runtime {
           Ok(true) => break,
           Ok(false) => continue,
           Err(e) => {
-            return Err(format!(
-              "Condition expression did not evaluate to a boolean: {}",
-              e
-            ));
+            return Err(EdxRuntimeError {
+              message: format!("Condition expression did not evaluate to a boolean: {}", e),
+              help: "Ensure the condition evaluates to a boolean value (TRUE or FALSE).".into(),
+            })?;
           }
         }
       },
@@ -426,23 +452,25 @@ impl Runtime {
         let iterations = match count_value {
           Reference::IntVar(v) => v,
           Reference::RealVar(v) => v as i64,
-          _ => return Err("Count expression did not evaluate to a numeric type".into()),
+          _ => {
+            return Err(EdxRuntimeError {
+              message: format!(
+                "Count expression for count-controlled loop must evaluate to a numeric type, got {}",
+                count_value.type_name()
+              ),
+              help: "Ensure the count expression evaluates to an integer or real value.".into(),
+            })?;
+          }
         };
 
         for _ in 0..iterations {
           for stmt in body.clone() {
-            match self.execute_node(stmt) {
-              Ok(val) => {
-                if val.is_some() {
-                  return Ok(val); // Return value from loop body to caller
-                }
+            let stmt_result = self.execute_node(stmt.clone())?;
+            match stmt_result {
+              Some(val) => {
+                return Ok(Some(val)); // Return value from loop body to caller
               }
-              Err(err) => {
-                return Err(format!(
-                  "Error executing count-controlled loop body: {}",
-                  err
-                ));
-              }
+              None => continue,
             }
           }
         }
@@ -467,7 +495,11 @@ impl Runtime {
             (s as i64, e as i64, st as i64)
           }
           _ => {
-            return Err("Start, end, and step expressions must evaluate to numeric types".into());
+            return Err(EdxRuntimeError {
+              message: "Start, end, and step expressions must evaluate to numeric types".into(),
+              help: "Ensure all expressions in the for loop evaluate to integer or real values."
+                .into(),
+            })?;
           }
         };
 
@@ -482,13 +514,12 @@ impl Runtime {
           };
 
           for stmt in body.clone() {
-            match self.execute_node(stmt) {
-              Ok(val) => {
-                if val.is_some() {
-                  return Ok(val); // Return value from loop body to caller
-                }
+            let stmt_result = self.execute_node(stmt.clone())?;
+            match stmt_result {
+              Some(val) => {
+                return Ok(Some(val)); // Return value from loop body to caller
               }
-              Err(err) => return Err(format!("Error executing for loop body: {}", err)),
+              None => continue,
             }
           }
         }
@@ -506,7 +537,15 @@ impl Runtime {
             .chars()
             .map(|c| Reference::StrVar(c.to_string()))
             .collect(),
-          _ => return Err("Iterable expression did not evaluate to an array".into()),
+          _ => {
+            return Err(EdxRuntimeError {
+              message: format!(
+                "Iterable expression for foreach loop must evaluate to an array or string, got {}",
+                iterable_value.type_name()
+              ),
+              help: "Ensure the iterable expression evaluates to an array or string.".into(),
+            })?;
+          }
         };
 
         for elem in elements {
@@ -516,13 +555,12 @@ impl Runtime {
           };
 
           for stmt in body.clone() {
-            match self.execute_node(stmt.clone()) {
-              Ok(val) => {
-                if val.is_some() {
-                  return Ok(val); // Return value from loop body to caller
-                }
+            let stmt_result = self.execute_node(stmt.clone())?;
+            match stmt_result {
+              Some(val) => {
+                return Ok(Some(val)); // Return value from loop body to caller
               }
-              Err(err) => return Err(format!("Error executing foreach loop body: {}", err)),
+              None => continue,
             }
           }
         }
@@ -570,12 +608,16 @@ impl Runtime {
             body,
           }) => {
             if parameters.len() != args.len() {
-              return Err(format!(
-                "Argument count mismatch for procedure '{}': expected {}, got {}",
-                name,
-                parameters.len(),
-                args.len()
-              ));
+              return Err(EdxRuntimeError {
+                message: format!(
+                  "Argument count mismatch for procedure '{}': expected {}, got {}",
+                  name,
+                  parameters.len(),
+                  args.len()
+                ),
+                help: "Ensure the number of arguments matches the procedure's parameter count."
+                  .into(),
+              })?;
             }
             Reference::Procedure {
               name: name.clone(),
@@ -583,7 +625,12 @@ impl Runtime {
               body: body.clone(),
             }
           }
-          _ => return Err(format!("Undefined procedure: {}", name)),
+          _ => {
+            return Err(EdxRuntimeError {
+              message: format!("Undefined procedure: {}", name),
+              help: "Make sure the procedure is declared before it is called.".into(),
+            })?;
+          }
         };
 
         self.execution_stack.push(Scope::Procedure(name.clone()));
@@ -620,34 +667,46 @@ impl Runtime {
     Ok(None)
   }
 
-  fn evaluate_expression(&mut self, expr: Expression) -> Result<Reference, String> {
+  fn evaluate_expression(&mut self, expr: Expression) -> Result<Reference> {
     match expr {
       Expression::IntConst(token) => {
         if let Token::IntegerNumeric(value) = token {
           Ok(Reference::IntVar(value))
         } else {
-          Err("Expected IntegerNumeric token".into())
+          Err(EdxRuntimeError {
+            message: "Expected IntegerNumeric token".into(),
+            help: "This error indicates an issue with the internal state of the interpreter. Please report this to the developers.".into(),
+          })?
         }
       }
       Expression::RealConst(token) => {
         if let Token::RealNumeric(value) = token {
           Ok(Reference::RealVar(value))
         } else {
-          Err("Expected RealNumeric token".into())
+          Err(EdxRuntimeError {
+            message: "Expected RealNumeric token".into(),
+            help: "This error indicates an issue with the internal state of the interpreter. Please report this to the developers.".into(),
+          })?
         }
       }
       Expression::StrConst(token) => {
         if let Token::StringLiteral(value) = token {
           Ok(Reference::StrVar(value))
         } else {
-          Err("Expected StringLiteral token".into())
+          Err(EdxRuntimeError {
+            message: "Expected StringLiteral token".into(),
+            help: "This error indicates an issue with the internal state of the interpreter. Please report this to the developers.".into(),
+          })?
         }
       }
       Expression::BoolConst(token) => {
         if let Token::Boolean(value) = token {
           Ok(Reference::BoolVar(value))
         } else {
-          Err("Expected Boolean token".into())
+          Err(EdxRuntimeError {
+            message: "Expected Boolean token".into(),
+            help: "This error indicates an issue with the internal state of the interpreter. Please report this to the developers.".into(),
+          })?
         }
       }
       Expression::Identifier(token) => {
@@ -656,11 +715,17 @@ impl Runtime {
             Some(var) => Ok(var.clone()),
             None => match self.global_vars.get(&name) {
               Some(var) => Ok(var.clone()),
-              None => Err(format!("Undefined variable: {}", name)),
+              None => Err(EdxRuntimeError {
+                message: format!("Undefined variable: {}", name),
+                help: "Make sure the variable is declared before it is used.".into(),
+              })?,
             },
           }
         } else {
-          Err("Expected Identifier token".into())
+          Err(EdxRuntimeError {
+            message: "Expected Identifier token".into(),
+            help: "This error indicates an issue with the internal state of the interpreter. Please report this to the developers.".into(),
+          })?
         }
       }
       Expression::ArrayConst(elements) => {
@@ -668,7 +733,9 @@ impl Runtime {
           .into_iter()
           .map(|e| match self.evaluate_expression(e) {
             Ok(val) => val,
-            Err(err) => panic!("Error evaluating array element: {}", err),
+            Err(err) => {
+              panic!("Error evaluating array element: {}", err);
+            }
           })
           .collect();
         Ok(Reference::ArrayVar(evaluated_elements))
@@ -684,12 +751,16 @@ impl Runtime {
             body,
           }) => {
             if parameters.len() != args.len() {
-              return Err(format!(
-                "Argument count mismatch for function '{}': expected {}, got {}",
-                name,
-                parameters.len(),
-                args.len()
-              ));
+              return Err(EdxRuntimeError {
+                message: format!(
+                  "Argument count mismatch for function '{}': expected {}, got {}",
+                  name,
+                  parameters.len(),
+                  args.len()
+                ),
+                help: "Ensure the number of arguments matches the function's parameter count."
+                  .into(),
+              })?;
             }
             Reference::Function {
               name: name.clone(),
@@ -697,7 +768,12 @@ impl Runtime {
               body: body.clone(),
             }
           }
-          _ => return Err(format!("Undefined function: {}", name)),
+          _ => {
+            return Err(EdxRuntimeError {
+              message: format!("Undefined function: {}", name),
+              help: "Make sure the function is declared before it is called.".into(),
+            })?;
+          }
         };
 
         // Execute the function body in a new scope
@@ -714,25 +790,23 @@ impl Runtime {
 
           let mut return_value: Option<Reference> = None;
           for stmt in body {
-            match self.execute_node(stmt.clone()) {
-              Ok(val) => {
-                // A return value was any part of the function body, we need to capture it and return it up to the caller
-                if val.is_some() {
-                  return_value = val;
-                  break; // Stop executing the function body once we encounter a return statement
-                }
+            let stmt_result = self.execute_node(stmt.clone())?;
+            match stmt_result {
+              Some(val) => {
+                return_value = Some(val); // Capture the return value from the function body execution
+                break;
               }
-              Err(err) => {
-                self.execution_stack.pop(); // Ensure we pop the function scope on error
-                return Err(format!("Error executing function body: {}", err));
-              }
+              None => continue,
             }
           }
           self.execution_stack.pop(); // Pop the function scope after execution
           Ok(return_value.unwrap_or(Reference::IntVar(0))) // Default return value if none provided
         } else {
           self.execution_stack.pop(); // Pop the function scope if we fail to execute
-          Err(format!("Failed to execute function: {}", name))
+          Err(EdxRuntimeError {
+            message: "Expected a function reference".into(),
+            help: "This error indicates an issue with the internal state of the interpreter. Please report this to the developers.".into(),
+          })?
         }
       }
       Expression::BinaryOperation {
@@ -814,43 +888,135 @@ impl Runtime {
 
           // Numeric division (always results in RealVar)
           (Reference::IntVar(l), Reference::IntVar(r), OperatorType::DIV) => {
+            // Division by zero check
+            if r == 0 {
+              Err(EdxRuntimeError {
+                message: "Division by zero".into(),
+                help: "BRO, YOU FREAKIN SRS???!! Bludious woke up and chose violence by trying to divide by zero. Go touch some grass and rethink your life choices.".into(),
+              })?;
+            }
             Ok(Reference::RealVar(l as f64 / r as f64))
           }
           (Reference::RealVar(l), Reference::RealVar(r), OperatorType::DIV) => {
+            // Division by zero check
+            if r == 0.0 {
+              Err(EdxRuntimeError {
+                message: "Division by zero".into(),
+                help: "BRO, YOU FREAKIN SRS???!! Bludious woke up and chose violence by trying to divide by zero. Go touch some grass and rethink your life choices.".into(),
+              })?;
+            }
             Ok(Reference::RealVar(l / r))
           }
           (Reference::IntVar(l), Reference::RealVar(r), OperatorType::DIV) => {
+            // Division by zero check
+            if r == 0.0 {
+              Err(EdxRuntimeError {
+                message: "Division by zero".into(),
+                help: "BRO, YOU FREAKIN SRS???!! Bludious woke up and chose violence by trying to divide by zero. Go touch some grass and rethink your life choices.".into(),
+              })?;
+            }
             Ok(Reference::RealVar(l as f64 / r))
           }
           (Reference::RealVar(l), Reference::IntVar(r), OperatorType::DIV) => {
+            // Division by zero check
+            if r == 0 {
+              Err(EdxRuntimeError {
+                message: "Division by zero".into(),
+                help: "BRO, YOU FREAKIN SRS???!! Bludious woke up and chose violence by trying to divide by zero. Go touch some grass and rethink your life choices.".into(),
+              })?;
+            }
             Ok(Reference::RealVar(l / r as f64))
           }
 
           // Numeric Integer division (always results in IntVar)
           (Reference::IntVar(l), Reference::IntVar(r), OperatorType::IDIV) => {
+            // Division by zero check
+            if r == 0 {
+              Err(EdxRuntimeError {
+                message: "Division by zero".into(),
+                help: "BRO, YOU FREAKIN SRS???!! Bludious woke up and chose violence by trying to divide by zero. Go touch some grass and rethink your life choices.".into(),
+              })?;
+            }
             Ok(Reference::IntVar(l / r))
           }
           (Reference::RealVar(l), Reference::RealVar(r), OperatorType::IDIV) => {
+            // Division by zero check
+            if r == 0.0 {
+              Err(EdxRuntimeError {
+                message: "Division by zero".into(),
+                help: "BRO, YOU FREAKIN SRS???!! Bludious woke up and chose violence by trying to divide by zero. Go touch some grass and rethink your life choices.".into(),
+              })?;
+            }
             Ok(Reference::IntVar((l / r) as i64))
           }
           (Reference::IntVar(l), Reference::RealVar(r), OperatorType::IDIV) => {
+            // Division by zero check
+            if r == 0.0 {
+              Err(EdxRuntimeError {
+                message: "Division by zero".into(),
+                help: "BRO, YOU FREAKIN SRS???!! Bludious woke up and chose violence by trying to divide by zero. Go touch some grass and rethink your life choices.".into(),
+              })?;
+            }
             Ok(Reference::IntVar((l as f64 / r) as i64))
           }
           (Reference::RealVar(l), Reference::IntVar(r), OperatorType::IDIV) => {
+            // Division by zero check
+            if r == 0 {
+              Err(EdxRuntimeError {
+                message: "Division by zero".into(),
+                help: "BRO, YOU FREAKIN SRS???!! Bludious woke up and chose violence by trying to divide by zero. Go touch some grass and rethink your life choices.".into(),
+              })?;
+            }
             Ok(Reference::IntVar((l / r as f64) as i64))
           }
 
           // Numeric modulus (always results in IntVar)
           (Reference::IntVar(l), Reference::IntVar(r), OperatorType::MOD) => {
+            // Modulus by zero check
+            if r == 0 {
+              Err(EdxRuntimeError {
+                message: "Modulus by zero".into(),
+                help:
+                  "Nahh bro js pack up! Modulus is also division by zero BTW. Disappointment..."
+                    .into(),
+              })?;
+            }
             Ok(Reference::IntVar(l % r))
           }
           (Reference::RealVar(l), Reference::RealVar(r), OperatorType::MOD) => {
+            // Modulus by zero check
+            if r == 0.0 {
+              Err(EdxRuntimeError {
+                message: "Modulus by zero".into(),
+                help:
+                  "Nahh bro js pack up! Modulus is also division by zero BTW. Disappointment..."
+                    .into(),
+              })?;
+            }
             Ok(Reference::IntVar((l % r) as i64))
           }
           (Reference::IntVar(l), Reference::RealVar(r), OperatorType::MOD) => {
+            // Modulus by zero check
+            if r == 0.0 {
+              Err(EdxRuntimeError {
+                message: "Modulus by zero".into(),
+                help:
+                  "Nahh bro js pack up! Modulus is also division by zero BTW. Disappointment..."
+                    .into(),
+              })?;
+            }
             Ok(Reference::IntVar((l as f64 % r) as i64))
           }
           (Reference::RealVar(l), Reference::IntVar(r), OperatorType::MOD) => {
+            // Modulus by zero check
+            if r == 0 {
+              Err(EdxRuntimeError {
+                message: "Modulus by zero".into(),
+                help:
+                  "Nahh bro js pack up! Modulus is also division by zero BTW. Disappointment..."
+                    .into(),
+              })?;
+            }
             Ok(Reference::IntVar((l % r as f64) as i64))
           }
 
@@ -863,7 +1029,10 @@ impl Runtime {
               Reference::RealVar(v) => v.to_string(),
               Reference::StrVar(v) => v,
               Reference::BoolVar(v) => v.to_string(),
-              Reference::ArrayVar(_) => panic!("Cannot concatenate array to string"),
+              Reference::ArrayVar(_) => Err(EdxRuntimeError {
+                message: "Cannot concatenate array to string".into(),
+                help: "Arrays are not supported in string concatenation operations.".into(),
+              })?,
               Reference::Procedure {
                 name,
                 parameters: _,
@@ -887,7 +1056,10 @@ impl Runtime {
               Reference::RealVar(v) => v.to_string(),
               Reference::StrVar(v) => v,
               Reference::BoolVar(v) => v.to_string(),
-              Reference::ArrayVar(_) => panic!("Cannot concatenate array to string"),
+              Reference::ArrayVar(_) => Err(EdxRuntimeError {
+                message: "Cannot concatenate array to string".into(),
+                help: "Arrays are not supported in string concatenation operations.".into(),
+              })?,
               Reference::Procedure {
                 name,
                 parameters: _,
@@ -924,10 +1096,10 @@ impl Runtime {
             OperatorType::GTE => Ok(Reference::BoolVar(l >= r)),
             OperatorType::EQ => Ok(Reference::BoolVar(l == r)),
             OperatorType::NEQ => Ok(Reference::BoolVar(l != r)),
-            _ => panic!(
-              "Unsupported operation for IntVar comparison: {} {} {}",
-              l, op, r
-            ),
+            _ => Err(EdxRuntimeError {
+              message: format!("Unsupported operation for IntVar comparison: {} {} {}", l, op, r),
+              help: "Supported comparison operators are <, >, <=, >=, =, and <>. Make sure you are using one of these operators in your comparison.".into(),
+            })?,
           },
           (Reference::RealVar(l), Reference::RealVar(r), op) => match op {
             OperatorType::LT => Ok(Reference::BoolVar(l < r)),
@@ -936,10 +1108,10 @@ impl Runtime {
             OperatorType::GTE => Ok(Reference::BoolVar(l >= r)),
             OperatorType::EQ => Ok(Reference::BoolVar(l == r)),
             OperatorType::NEQ => Ok(Reference::BoolVar(l != r)),
-            _ => panic!(
-              "Unsupported operation for RealVar comparison: {} {} {}",
-              l, op, r
-            ),
+            _ => Err(EdxRuntimeError {
+              message: format!("Unsupported operation for RealVar comparison: {} {} {}", l, op, r),
+              help: "Supported comparison operators are <, >, <=, >=, =, and <>. Make sure you are using one of these operators in your comparison.".into(),
+            })?,
           },
           (Reference::IntVar(l), Reference::RealVar(r), op) => match op {
             OperatorType::LT => Ok(Reference::BoolVar((l as f64) < r)),
@@ -948,10 +1120,10 @@ impl Runtime {
             OperatorType::GTE => Ok(Reference::BoolVar((l as f64) >= r)),
             OperatorType::EQ => Ok(Reference::BoolVar((l as f64) == r)),
             OperatorType::NEQ => Ok(Reference::BoolVar((l as f64) != r)),
-            _ => panic!(
-              "Unsupported operation for IntVar-RealVar comparison: {} {} {}",
-              l, op, r
-            ),
+            _ => Err(EdxRuntimeError {
+              message: format!("Unsupported operation for IntVar-RealVar comparison: {} {} {}", l, op, r),
+              help: "Supported comparison operators are <, >, <=, >=, =, and <>. Make sure you are using one of these operators in your comparison.".into(),
+            })?,
           },
           (Reference::RealVar(l), Reference::IntVar(r), op) => match op {
             OperatorType::LT => Ok(Reference::BoolVar(l < (r as f64))),
@@ -960,35 +1132,41 @@ impl Runtime {
             OperatorType::GTE => Ok(Reference::BoolVar(l >= (r as f64))),
             OperatorType::EQ => Ok(Reference::BoolVar(l == (r as f64))),
             OperatorType::NEQ => Ok(Reference::BoolVar(l != (r as f64))),
-            _ => panic!(
-              "Unsupported operation for RealVar-IntVar comparison: {} {} {}",
-              l, op, r
-            ),
+            _ => Err(EdxRuntimeError {
+              message: format!("Unsupported operation for RealVar-IntVar comparison: {} {} {}", l, op, r),
+              help: "Supported comparison operators are <, >, <=, >=, =, and <>. Make sure you are using one of these operators in your comparison.".into(),
+            })?,
           },
           (Reference::StrVar(l), Reference::StrVar(r), op) => match op {
             OperatorType::EQ => Ok(Reference::BoolVar(l == r)),
             OperatorType::NEQ => Ok(Reference::BoolVar(l != r)),
-            _ => panic!(
-              "Unsupported operation for StrVar comparison: {} {} {}",
-              l, op, r
-            ),
+            _ => Err(EdxRuntimeError {
+              message: format!("Unsupported operation for StrVar comparison: {} {} {}", l, op, r),
+              help: "Supported comparison operators are <, >, <=, >=, =, and <>. Make sure you are using one of these operators in your comparison.".into(),
+            })?,
           },
           (Reference::BoolVar(l), Reference::BoolVar(r), op) => match op {
             OperatorType::EQ => Ok(Reference::BoolVar(l == r)),
             OperatorType::NEQ => Ok(Reference::BoolVar(l != r)),
-            _ => panic!(
+            _ => Err(EdxRuntimeError {
+               message: format!(
               "Unsupported operation for BoolVar comparison: {} {} {}",
               l, op, r
             ),
+              help: "Supported comparison operators are <, >, <=, >=, =, and <>. Make sure you are using one of these operators in your comparison.".into(),
+            })?,
           },
 
           (lhs, rhs, op) => {
-            panic!(
+            Err(EdxRuntimeError {
+               message: format!(
               "Unsupported operation or operand types: {} {} {}",
               lhs.type_name(),
               op,
               rhs.type_name()
-            );
+            ),
+              help: "Make sure you are using supported operand types and operators.".into(),
+            })?
           }
         }
       }
