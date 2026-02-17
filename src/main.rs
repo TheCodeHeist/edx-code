@@ -65,10 +65,8 @@ fn interpreter(filename: &str) -> Result<()> {
   let mut parser = Parser::new(lexer);
   parser.parse()?;
 
-  println!("{}", parser.get_ast());
-
-  // let mut runtime = Runtime::new(parser.get_ast());
-  // runtime.execute()?;
+  let mut runtime = Runtime::new(parser.get_ast());
+  runtime.execute()?;
 
   Ok(())
 }
