@@ -3,40 +3,72 @@ mod parser;
 mod runtime;
 mod stdlib;
 mod tokenizer;
+mod transpiler;
 
+use clap::Parser as ClapParser;
 use miette::Result;
+
 use parser::Parser;
 use runtime::Runtime;
 use tokenizer::Lexer;
+use transpiler::PythonTranspiler;
+
+#[derive(ClapParser, Debug)]
+#[command(name = "Pearson Edexcel Pseudocode Interpreter", version, about, long_about = None)]
+struct Cli {
+  /// The source file to interpret or transpile
+  source_file: String,
+  /// The output path for transpiled Python code
+  #[arg(long, help = "The output path for transpiled Python code")]
+  transpile_py: Option<String>,
+}
 
 fn main() -> Result<()> {
   // Getting source code from a file in the arguments
-  let args: Vec<String> = std::env::args().collect();
-  if args.len() < 2 {
-    eprintln!("Usage: {} <source_file>", args[0]);
-    std::process::exit(1);
+  let args = Cli::parse();
+  if let Some(output_path) = args.transpile_py {
+    // Transpile to Python
+    transpile_to_python(&args.source_file, &output_path)?;
+  } else {
+    // Interpret the source code
+    interpreter(&args.source_file)?;
   }
 
-  let filename = &args[1];
+  Ok(())
+}
+
+fn transpile_to_python(filename: &str, output_path: &str) -> Result<()> {
   let source_code =
     std::fs::read_to_string(filename).expect("Something went wrong reading the file");
-
-  // let source_code = String::from("SET x TO 10 IF x THEN WRITE 'Hello' END IF");
 
   let mut lexer = Lexer::new(filename.to_string(), source_code);
   lexer.tokenize()?;
 
-  // for token in &lexer.tokens {
-  //   println!("Token: {}", token);
-  // }
+  let mut parser = Parser::new(lexer);
+  parser.parse()?;
+
+  let mut transpiler = PythonTranspiler::new(parser.get_ast());
+  let python_code = transpiler.transpile()?;
+
+  std::fs::write(output_path, python_code).expect("Unable to write file");
+
+  Ok(())
+}
+
+fn interpreter(filename: &str) -> Result<()> {
+  let source_code =
+    std::fs::read_to_string(filename).expect("Something went wrong reading the file");
+
+  let mut lexer = Lexer::new(filename.to_string(), source_code);
+  lexer.tokenize()?;
 
   let mut parser = Parser::new(lexer);
   parser.parse()?;
 
-  // println!("{}", parser.pretty_ast());
+  println!("{}", parser.get_ast());
 
-  let mut runtime = Runtime::new(parser.get_ast());
-  runtime.execute()?;
+  // let mut runtime = Runtime::new(parser.get_ast());
+  // runtime.execute()?;
 
   Ok(())
 }

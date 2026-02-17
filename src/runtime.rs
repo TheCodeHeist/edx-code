@@ -146,7 +146,7 @@ impl Runtime {
       }
       Node::ArrayElementAssignment {
         array_name,
-        index,
+        indices,
         value,
       } => {
         // println!("Assigning value to array element: {}[{:?}] = {}", array_name, index, value);
@@ -178,7 +178,7 @@ impl Runtime {
 
         // Evaluate index expressions
         let mut current_array = &mut array;
-        for (i, idx_expr) in index.iter().enumerate() {
+        for (i, idx_expr) in indices.iter().enumerate() {
           let idx_value = self.evaluate_expression(idx_expr.clone())?;
           let idx_int = match idx_value {
             Reference::IntVar(v) => v,
@@ -197,7 +197,7 @@ impl Runtime {
             })?;
           }
 
-          if i == index.len() - 1 {
+          if i == indices.len() - 1 {
             // Last index - assign the value
             current_array[idx_int as usize] = evaluated_value.clone();
           } else {
@@ -740,6 +740,59 @@ impl Runtime {
           })
           .collect();
         Ok(Reference::ArrayVar(evaluated_elements))
+      }
+      Expression::ArrayAccess { name, indices } => {
+        // Look up the array variable
+        let array_ref = match self.local_vars.get(&name) {
+          Some(var) => var.clone(),
+          None => match self.global_vars.get(&name) {
+            Some(var) => var.clone(),
+            None => {
+              return Err(EdxRuntimeError {
+                message: format!("Undefined variable: {}", name),
+                help: "Make sure the variable is declared before it is used.".into(),
+              })?;
+            }
+          },
+        };
+
+        // Ensure it's an array variable
+        let array = match array_ref {
+          Reference::ArrayVar(arr) => arr,
+          _ => return Err(EdxRuntimeError {
+            message: format!("Variable '{}' is not an array", name),
+            help: "Make sure you are using the correct variable name and that it is declared as an array.".into(),
+          })?,
+        };
+
+        // Evaluate index expressions
+        let mut current_array = &array;
+        for idx_expr in indices {
+          let idx_value = self.evaluate_expression(idx_expr.clone())?;
+          let idx_int = match idx_value {
+            Reference::IntVar(v) => v,
+            _ => {
+              return Err(EdxRuntimeError {
+                message: format!("Array index must evaluate to an integer, got {}", idx_value),
+                help: "Make sure the array index is an integer.".into(),
+              })?;
+            }
+          };
+
+          if idx_int < 0 || (idx_int as usize) >= current_array.len() {
+            return Err(EdxRuntimeError {
+              message: format!("Array index out of bounds: {}", idx_int),
+              help: "Make sure the array index is within the bounds of the array.".into(),
+            })?;
+          }
+
+          match &current_array[idx_int as usize] {
+            Reference::ArrayVar(arr) => current_array = arr, // Navigate to the next level of the array for multi-dimensional access
+            other => return Ok(other.clone()), // Return the value at the current index if it's not an array (i.e. we've reached the final element in the access)
+          }
+        }
+
+        Ok(Reference::ArrayVar(current_array.clone())) // Return the final accessed array element (which could be a nested array if there are multiple indices)
       }
       Expression::FunctionCall { name, args } => {
         // Function calls return a value, so we need to evaluate the function and return its result

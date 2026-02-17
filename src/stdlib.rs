@@ -31,6 +31,24 @@ impl StdLib {
     }
   }
 
+  pub fn get_python_equivalent(
+    &self,
+    func: &StdLibFunction,
+    translated_args: Vec<String>,
+  ) -> (String, Option<String>) {
+    // This function will return the Python equivalent of a given standard library function.
+    // The second element of the tuple is an optional module name that needs to be imported to use the function.
+
+    match func {
+      StdLibFunction::Length(_) => (format!("len({})", translated_args[0]), None),
+      StdLibFunction::Type(_) => (format!("type({})", translated_args[0]), None),
+      StdLibFunction::Random(_) => (
+        format!("random.randint(0, {})", translated_args[0]),
+        Some("random".to_string()),
+      ),
+    }
+  }
+
   pub fn call_function(&self, func: StdLibFunction, args: Vec<Reference>) -> Result<Reference> {
     // This function will allow users to call a standard library function with the given arguments.
 

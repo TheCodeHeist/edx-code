@@ -6,4 +6,4 @@ SET yesKey TO 'Y'
 SET noKey TO 'N'
 SET Age TO 16
 SET is_student2223 TO TRUE
-SET grades TO [85, 90, 78, 92]
+SET grades TO [85, 90, 78, '92', [95, 88]]

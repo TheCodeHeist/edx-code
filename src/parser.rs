@@ -14,6 +14,10 @@ pub enum Expression {
   StrConst(Token),
   BoolConst(Token),
   ArrayConst(Vec<Expression>), // Added ArrayConst to represent array literals, e.g. [1, 2, 3], or [[1, 2], [3, 4]]
+  ArrayAccess {
+    name: String,
+    indices: Vec<Expression>,
+  }, // Added ArrayAccess to represent accessing an array element, e.g. myArray[0], or myArray[i + 1]
   FunctionCall {
     name: String,
     args: Vec<Expression>,
@@ -44,6 +48,10 @@ impl std::fmt::Display for Expression {
       Expression::ArrayConst(elements) => {
         let element_strs: Vec<String> = elements.iter().map(|e| format!("{}", e)).collect();
         write!(f, "[{}]", element_strs.join(", "))
+      }
+      Expression::ArrayAccess { name, indices } => {
+        let index_strs: Vec<String> = indices.iter().map(|i| format!("{}", i)).collect();
+        write!(f, "{}[{}]", name, index_strs.join(", "))
       }
       Expression::FunctionCall { name, args } => {
         let arg_strs: Vec<String> = args.iter().map(|a| format!("{}", a)).collect();
@@ -86,7 +94,7 @@ pub enum Node {
   },
   ArrayElementAssignment {
     array_name: String,
-    index: Vec<Expression>,
+    indices: Vec<Expression>,
     value: Expression,
   },
   SendIO {
@@ -164,10 +172,10 @@ impl std::fmt::Display for Node {
       }
       Node::ArrayElementAssignment {
         array_name,
-        index,
+        indices,
         value,
       } => {
-        let index_strs: Vec<String> = index.iter().map(|i| format!("{}", i)).collect();
+        let index_strs: Vec<String> = indices.iter().map(|i| format!("{}", i)).collect();
         write!(
           f,
           "ArrayElementAssignment: {}[{}] = {}",
@@ -421,7 +429,7 @@ impl Parser {
               self.scopes.get_mut(&self.current_scope).unwrap().push(
                 Node::ArrayElementAssignment {
                   array_name: name,
-                  index: indices,
+                  indices,
                   value,
                 },
               );
@@ -1346,13 +1354,31 @@ impl Parser {
         self.lexer.next_token();
 
         lhs = if op == OperatorType::LBRACKET {
-          let rhs = self.expr_bp(0.0);
+          // Array access
+          // Format: <expression> [ <expression> (, <expression>)* ]
+          let mut indices = Vec::new();
+
+          loop {
+            let index = self.expr_bp(0.0);
+            indices.push(index);
+
+            if self.lexer.peek_token() == Token::Operator(OperatorType::RBRACKET) {
+              break;
+            }
+
+            match self.lexer.next_token() {
+              Token::Operator(OperatorType::COMMA) => {}
+              other => panic!("Expected ',' or ']', found {}", other),
+            }
+          }
 
           match self.lexer.next_token() {
-            Token::Operator(OperatorType::RBRACKET) => Expression::BinaryOperation {
-              operator: op,
-              left: Box::new(lhs),
-              right: Box::new(rhs),
+            Token::Operator(OperatorType::RBRACKET) => Expression::ArrayAccess {
+              name: match lhs {
+                Expression::Identifier(Token::Identifier(name)) => name,
+                _ => panic!("Expected array name before '[', found {}", lhs),
+              },
+              indices,
             },
             other => panic!("Expected ']', found {}", other),
           }

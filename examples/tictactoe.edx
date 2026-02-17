@@ -31,16 +31,16 @@ BEGIN FUNCTION
   END FOREACH
   # Check columns
   FOR i FROM 0 TO 2 DO
-    IF board[0][i] = board[1][i] AND board[1][i] = board[2][i] THEN
-      RETURN board[0][i]
+    IF board[0, i] = board[1, i] AND board[1, i] = board[2, i] THEN
+      RETURN board[0, i]
     END IF
   END FOR
   # Check diagonals
-  IF board[0][0] = board[1][1] AND board[1][1] = board[2][2] THEN
-    RETURN board[0][0]
+  IF board[0, 0] = board[1, 1] AND board[1, 1] = board[2, 2] THEN
+    RETURN board[0, 0]
   END IF
-  IF board[0][2] = board[1][1] AND board[1][1] = board[2][0] THEN
-    RETURN board[0][2]
+  IF board[0, 2] = board[1, 1] AND board[1, 1] = board[2, 0] THEN
+    RETURN board[0, 2]
   END IF
   RETURN FALSE
 END FUNCTION
@@ -74,7 +74,7 @@ WHILE TRUE DO
   # Update the board
   SET row TO (move - 1) DIV 3
   SET col TO (move - 1) MOD 3
-  IF board[row][col] = 'X' OR board[row][col] = 'O' THEN
+  IF board[row, col] = 'X' OR board[row, col] = 'O' THEN
     SEND 'Cell already occupied. Please try again.' TO DISPLAY
     CONTINUE
   END IF

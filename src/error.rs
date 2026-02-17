@@ -30,6 +30,14 @@ pub struct EdxRuntimeError {
 }
 
 #[derive(Error, Diagnostic, Debug)]
+#[error("FAAHHH! Transpilation error: {message}")]
+#[diagnostic(code(edx::transpilation_error), help("{help}"))] // You can customize the code and severity as needed
+pub struct EdxTranspilationError {
+  pub message: String,
+  pub help: String,
+}
+
+#[derive(Error, Diagnostic, Debug)]
 #[error("FAAHHH! StdLib error: {message}")]
 #[diagnostic(code(edx::stdlib_error), help("{help}"))] // You can customize the code and severity as needed
 pub struct EdxStdLibError {
