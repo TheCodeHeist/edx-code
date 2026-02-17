@@ -1,3 +1,7 @@
+#####################################################################################################################
+# THIS SCRIPT WAS USED AS A PROTOTYPE AND FOR TESTING PURPOSES DURING DEVELOPMENT. IT IS NOT THE FINAL INTERPRETER. #
+#####################################################################################################################
+
 import argparse, json
 from enum import Enum
 
