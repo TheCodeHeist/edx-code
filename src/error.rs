@@ -28,3 +28,11 @@ pub struct EdxRuntimeError {
   pub message: String,
   pub help: String,
 }
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("FAAHHH! StdLib error: {message}")]
+#[diagnostic(code(edx::stdlib_error), help("{help}"))] // You can customize the code and severity as needed
+pub struct EdxStdLibError {
+  pub message: String,
+  pub help: String,
+}

@@ -1,6 +1,7 @@
 mod error;
 mod parser;
 mod runtime;
+mod stdlib;
 mod tokenizer;
 
 use miette::Result;

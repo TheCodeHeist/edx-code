@@ -6,6 +6,7 @@ use std::{
 use crate::{
   error::EdxRuntimeError,
   parser::{Expression, Node},
+  stdlib::StdLib,
   tokenizer::{OperatorType, Token},
 };
 
@@ -743,7 +744,22 @@ impl Runtime {
       Expression::FunctionCall { name, args } => {
         // Function calls return a value, so we need to evaluate the function and return its result
 
-        // Look up the function definition
+        // First, we check if the function being called is a standard library function. If it is, we can call it directly without needing to look it up in the global variables.
+        let std = StdLib::import(); // Ensure the standard library is imported so we can access its functions
+
+        match std.get_function_ref(name.clone()) {
+          Some(func) => {
+            let evaluated_args: Vec<Reference> = args
+              .into_iter()
+              .map(|arg| self.evaluate_expression(arg).unwrap())
+              .collect();
+
+            return std.call_function(func, evaluated_args);
+          }
+          None => {}
+        };
+
+        // Look up the function definition in the global variables to get its parameters and body for execution
         let function_ref = match self.global_vars.get(&name) {
           Some(Reference::Function {
             name,

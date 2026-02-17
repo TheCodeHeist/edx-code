@@ -1,0 +1,8 @@
+SET array TO [1, 2, 3, 4, 5]
+SET string TO 'Hello, World!'
+
+SEND LENGTH(array) TO DISPLAY
+SEND LENGTH(string) TO DISPLAY
+SEND RANDOM(100) TO DISPLAY
+SEND TYPE(array) TO DISPLAY
+SEND TYPE(string) TO DISPLAY

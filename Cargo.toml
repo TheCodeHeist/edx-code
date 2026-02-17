@@ -3,6 +3,11 @@ name = "edx-code"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "edxrun"
+path = "src/main.rs"
+
 [dependencies]
 miette = { version = "7.6.0", features = ["fancy"] }
+rand = "0.10.0"
 thiserror = "2.0.18"
