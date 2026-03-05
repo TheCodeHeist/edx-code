@@ -1,7 +1,11 @@
 [package]
+authors = ["Md Riyasat Hossain <TheCodeHeist>"]
 name = "edx-code"
 version = "0.1.0"
 edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
 
 [[bin]]
 name = "edxrun"
@@ -9,6 +13,9 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5.59", features = ["derive"] }
+getrandom = { version = "0.4.2", features = ["wasm_js"] }
 miette = { version = "7.6.0", features = ["fancy"] }
 rand = "0.10.0"
 thiserror = "2.0.18"
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"

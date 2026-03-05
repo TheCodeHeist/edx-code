@@ -15,4 +15,4 @@ This is a fun project to bring the Pearson Edexcel pseudocode to life! The inter
 
 ## Usage
 
-Either way, you can build this project from source using Cargo. However, since this is a fun project, I am working on a web-based interface to make it more accessible. Stay tuned for updates!
+The web-based interpreter can be accessed at [https://edx-code.vercel.app/](https://edx-code.vercel.app/). You can write your pseudocode in the editor and transpile to Python to see the output. _The interpreter is in progress..._
