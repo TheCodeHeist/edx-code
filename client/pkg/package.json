@@ -1,0 +1,20 @@
+{
+  "name": "edx-code",
+  "type": "module",
+  "collaborators": [
+    "Md Riyasat Hossain <TheCodeHeist>"
+  ],
+  "version": "0.1.0",
+  "files": [
+    "edx_code_bg.wasm",
+    "edx_code.js",
+    "edx_code_bg.js",
+    "edx_code.d.ts"
+  ],
+  "main": "edx_code.js",
+  "types": "edx_code.d.ts",
+  "sideEffects": [
+    "./edx_code.js",
+    "./snippets/*"
+  ]
+}
