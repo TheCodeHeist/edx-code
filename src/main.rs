@@ -1,14 +1,17 @@
-// mod error;
-// mod parser;
-// mod runtime;
-// mod stdlib;
-// mod tokenizer;
-// mod transpiler;
+mod error;
+mod parser;
+mod runtime;
+mod stdlib;
+mod tokenizer;
+mod transpiler;
 
 use clap::Parser as ClapParser;
 use miette::Result;
 
-// use edx_code::{parser::Parser, runtime::Runtime, tokenizer::Lexer, transpiler::PythonTranspiler};
+use parser::Parser;
+use runtime::Runtime;
+use tokenizer::Lexer;
+use transpiler::PythonTranspiler;
 
 #[derive(ClapParser, Debug)]
 #[command(name = "Pearson Edexcel Pseudocode Interpreter", version, about, long_about = None)]
@@ -25,7 +28,7 @@ fn main() -> Result<()> {
   let args = Cli::parse();
   if let Some(output_path) = args.transpile_py {
     // Transpile to Python
-    // transpile_to_python(&args.source_file, &output_path)?;
+    transpile_to_python(&args.source_file, &output_path)?;
   } else {
     // Interpret the source code
     // interpreter(&args.source_file)?;
@@ -34,23 +37,23 @@ fn main() -> Result<()> {
   Ok(())
 }
 
-// fn transpile_to_python(filename: &str, output_path: &str) -> Result<()> {
-//   let source_code =
-//     std::fs::read_to_string(filename).expect("Something went wrong reading the file");
+fn transpile_to_python(filename: &str, output_path: &str) -> Result<()> {
+  let source_code =
+    std::fs::read_to_string(filename).expect("Something went wrong reading the file");
 
-//   let mut lexer = Lexer::new(filename.to_string(), source_code);
-//   lexer.tokenize()?;
+  let mut lexer = Lexer::new(filename.to_string(), source_code);
+  lexer.tokenize()?;
 
-//   let mut parser = Parser::new(lexer);
-//   parser.parse()?;
+  let mut parser = Parser::new(lexer);
+  parser.parse()?;
 
-//   let mut transpiler = PythonTranspiler::new(parser.get_ast());
-//   let python_code = transpiler.transpile()?;
+  let mut transpiler = PythonTranspiler::new(parser.get_ast());
+  let python_code = transpiler.transpile()?;
 
-//   std::fs::write(output_path, python_code).expect("Unable to write file");
+  std::fs::write(output_path, python_code).expect("Unable to write file");
 
-//   Ok(())
-// }
+  Ok(())
+}
 
 // fn interpreter(filename: &str) -> Result<()> {
 //   let source_code =

@@ -12,6 +12,7 @@ use miette::Result;
 pub struct PythonTranspiler {
   ast: Node,
   closure_stack: Vec<String>,
+  operator_precedence_stack: Vec<OperatorType>,
   lines: Vec<String>,
   imported_modules: HashSet<String>, // To keep track of which modules we need to import at the top of the generated Python code
 }
@@ -21,6 +22,7 @@ impl PythonTranspiler {
     Self {
       ast,
       closure_stack: Vec::new(),
+      operator_precedence_stack: Vec::new(),
       lines: Vec::new(),
       imported_modules: HashSet::new(),
     }
@@ -220,6 +222,11 @@ impl PythonTranspiler {
         self.lines.push(format!("{}break", self.indent()));
       }
       Node::ProcedureDeclaration { name, parameters, body } => {
+        // Adding one excess newline before procedure declaration and function declaration...
+        if self.lines.last().map_or(true, |line| !line.is_empty()) {
+          self.lines.push(String::new());
+        }
+
         let param_list = parameters.join(", ");
         self.lines.push(format!("{}def {}({}):", self.indent(), name, param_list));
         self.closure_stack.push("def".to_string());
@@ -229,8 +236,16 @@ impl PythonTranspiler {
         }
 
         self.closure_stack.pop();
+
+        // ... and also one excess newline after procedure declaration and function declaration for better readability in the generated Python code
+        self.lines.push(String::new());
       }
       Node::FunctionDeclaration { name, parameters, body } => {
+        // Adding one excess newline before procedure declaration and function declaration...
+        if self.lines.last().map_or(true, |line| !line.is_empty()) {
+          self.lines.push(String::new());
+        }
+
         let param_list = parameters.join(", ");
         self.lines.push(format!("{}def {}({}):", self.indent(), name, param_list));
         self.closure_stack.push("def".to_string());
@@ -240,6 +255,9 @@ impl PythonTranspiler {
         }
 
         self.closure_stack.pop();
+
+        // ... and also one excess newline after procedure declaration and function declaration for better readability in the generated Python code
+        self.lines.push(String::new());
       }
       Node::ProcedureCall { name, args } => {
         let translated_args: Vec<String> = args
@@ -262,6 +280,13 @@ impl PythonTranspiler {
           message: format!("Unsupported node type: {}", n),
           help: "This error indicates that the transpiler does not yet support a certain language construct used in your code. Please check the documentation for supported features and make sure you are using only those constructs in your EDX program.".into(),
         })?
+      }
+    }
+
+    // We add an empty line after each statement for better readability in the generated Python code, except for the last statement in a block to avoid unnecessary trailing newlines
+    if let Some(last_line) = self.lines.last() {
+      if !last_line.is_empty() {
+        self.lines.push(String::new());
       }
     }
 
@@ -382,59 +407,300 @@ impl PythonTranspiler {
         left,
         right,
       } => {
+        // push visited operator onto the operator precedence stack
+        self.operator_precedence_stack.push(operator.clone());
+
         let left_val = self.translate_expression(*left)?;
         let right_val = self.translate_expression(*right)?;
 
+        self.operator_precedence_stack.pop(); // pop the operator after translating the operands
+
         match (left_val, right_val, operator) {
           // Handle Array Access
-          (l, r, OperatorType::LBRACKET) => Ok(format!("{}[{}]", l, r)),
+          (l, r, OperatorType::LBRACKET) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::LBRACKET) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                return Ok(format!("({}[{}])", l, r));
+              } else {
+                return Ok(format!("{}[{}]", l, r));
+              }
+            } else {
+              return Ok(format!("{}[{}]", l, r));
+            }
+          },
 
           // Numeric addition
-          (l, r, OperatorType::ADD) => Ok(format!("({} + {})", l, r)),
+          (l, r, OperatorType::ADD) =>{
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::ADD) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                return Ok(format!("({} + {})", l, r));
+              } else {
+                return Ok(format!("{} + {}", l, r));
+              }
+            } else {
+              return Ok(format!("{} + {}", l, r));
+            }
+          },
 
           // Numeric subtraction or negation
           (l, r, OperatorType::SUB) => {
             if l == "0" {
-              Ok(format!("(-{})", r))
+              if let Some(top_op) = self.operator_precedence_stack.last() {
+                if self.get_operator_precedence(&OperatorType::SUB) < self.get_operator_precedence(top_op) {
+                  // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the operand to ensure correct evaluation order in Python
+                  return Ok(format!("(-{})", r));
+                } else {
+                  return Ok(format!("-{}", r));
+                }
+              } else {
+                return Ok(format!("-{}", r));
+              }
             } else {
-              Ok(format!("({} - {})", l, r))
+              if let Some(top_op) = self.operator_precedence_stack.last() {
+                if self.get_operator_precedence(&OperatorType::SUB) < self.get_operator_precedence(top_op) {
+                  // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                  return Ok(format!("({} - {})", l, r));
+                } else {
+                  return Ok(format!("{} - {}", l, r));
+                }
+              } else {
+                return Ok(format!("{} - {}", l, r));
+              }
             }
           }
 
           // Numeric multiplication
-          (l, r, OperatorType::MUL) => Ok(format!("({} * {})", l, r)),
+          (l, r, OperatorType::MUL) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::MUL) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} * {})", l, r));
+              } else {
+                
+                return Ok(format!("{} * {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} * {}", l, r));
+            }
+          },
 
           // Numeric exponentiation
-          (l, r, OperatorType::POW) => Ok(format!("({} ** {})", l, r)),
+          (l, r, OperatorType::POW) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::POW) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} ** {})", l, r));
+              } else {
+                
+                return Ok(format!("{} ** {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} ** {}", l, r));
+            }
+          },
 
           // Numeric division (always results in RealVar)
-          (l, r, OperatorType::DIV) => Ok(format!("({} / {})", l, r)),
+          (l, r, OperatorType::DIV) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::DIV) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} / {})", l, r));
+              } else {
+                
+                return Ok(format!("{} / {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} / {}", l, r));
+            }
+          },
 
           // Numeric Integer division (always results in IntVar)
-          (l, r, OperatorType::IDIV) => Ok(format!("({} // {})", l, r)),
+          (l, r, OperatorType::IDIV) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::IDIV) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} // {})", l, r));
+              } else {
+                
+                return Ok(format!("{} // {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} // {}", l, r));
+            }
+          },
 
           // Numeric modulus (always results in IntVar)
-          (l, r, OperatorType::MOD) => Ok(format!("({} % {})", l, r)),
+          (l, r, OperatorType::MOD) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::MOD) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} % {})", l, r));
+              } else {
+                
+                return Ok(format!("{} % {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} % {}", l, r));
+            }
+          },
 
           // String concatenation
-          (l, r, OperatorType::CAT) => Ok(format!("({} + {})", l, r)),
+          (l, r, OperatorType::CAT) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::CAT) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} + {})", l, r));
+              } else {
+                
+                return Ok(format!("{} + {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} + {}", l, r));
+            }
+          },
 
           // Boolean AND
-          (l, r, OperatorType::AND) => Ok(format!("({} and {})", l, r)),
+          (l, r, OperatorType::AND) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::AND) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} and {})", l, r));
+              } else {
+                
+                return Ok(format!("{} and {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} and {}", l, r));
+            }
+          },
 
           // Boolean OR
-          (l, r, OperatorType::OR) => Ok(format!("({} or {})", l, r)),
+          (l, r, OperatorType::OR) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::OR) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} or {})", l, r));
+              } else {
+                
+                return Ok(format!("{} or {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} or {}", l, r));
+            }
+          },
 
           // BOOLEAN NOT (unary)
           (_, r, OperatorType::NOT) => Ok(format!("(not {})", r)),
 
           // Compare operations
-          (l, r, OperatorType::LT) => Ok(format!("({} < {})", l, r)),
-          (l, r, OperatorType::GT) => Ok(format!("({} > {})", l, r)),
-          (l, r, OperatorType::LTE) => Ok(format!("({} <= {})", l, r)),
-          (l, r, OperatorType::GTE) => Ok(format!("({} >= {})", l, r)),
-          (l, r, OperatorType::EQ) => Ok(format!("({} == {})", l, r)),
-          (l, r, OperatorType::NEQ) => Ok(format!("({} != {})", l, r)),
+          (l, r, OperatorType::LT) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::LT) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} < {})", l, r));
+              } else {
+                
+                return Ok(format!("{} < {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} < {}", l, r));
+            }
+          },
+          (l, r, OperatorType::GT) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::GT) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} > {})", l, r));
+              } else {
+                
+                return Ok(format!("{} > {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} > {}", l, r));
+            }
+          },
+          (l, r, OperatorType::LTE) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::LTE) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} <= {})", l, r));
+              } else {
+                
+                return Ok(format!("{} <= {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} <= {}", l, r));
+            }
+          },
+          (l, r, OperatorType::GTE) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::GTE) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} >= {})", l, r));
+              } else {
+                
+                return Ok(format!("{} >= {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} >= {}", l, r));
+            }
+          },
+          (l, r, OperatorType::EQ) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::EQ) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} == {})", l, r));
+              } else {
+                
+                return Ok(format!("{} == {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} == {}", l, r));
+            }
+          },
+          (l, r, OperatorType::NEQ) => {
+            if let Some(top_op) = self.operator_precedence_stack.last() {
+              if self.get_operator_precedence(&OperatorType::NEQ) < self.get_operator_precedence(top_op) {
+                // If the current operator has lower precedence than the operator on top of the stack, we need to add parentheses around the left operand to ensure correct evaluation order in Python
+                
+                return Ok(format!("({} != {})", l, r));
+              } else {
+                
+                return Ok(format!("{} != {}", l, r));
+              }
+            } else {
+              
+              return Ok(format!("{} != {}", l, r));
+            }
+          },
 
           (lhs, rhs, op) => Err(EdxRuntimeError {
             message: format!(
@@ -450,5 +716,20 @@ impl PythonTranspiler {
 
   fn indent(&self) -> String {
     "  ".repeat(self.closure_stack.len())
+  }
+
+  fn get_operator_precedence(&self, operator: &OperatorType) -> u8 {
+    // Define operator precedence levels (higher number means higher precedence)
+    match operator {
+      OperatorType::LBRACKET => 9, // Array access has the highest precedence
+      OperatorType::POW => 8,
+      OperatorType::MUL | OperatorType::DIV | OperatorType::IDIV | OperatorType::MOD => 7,
+      OperatorType::ADD | OperatorType::SUB | OperatorType::CAT => 6,
+      OperatorType::LT | OperatorType::GT | OperatorType::LTE | OperatorType::GTE | OperatorType::EQ | OperatorType::NEQ => 5,
+      OperatorType::NOT => 4, // Unary NOT has higher precedence than AND/OR
+      OperatorType::AND => 3,
+      OperatorType::OR => 2,
+      _ => 1, // Default precedence for any other operators (if any)
+    }
   }
 }

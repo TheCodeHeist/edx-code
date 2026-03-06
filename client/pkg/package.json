@@ -4,7 +4,13 @@
   "collaborators": [
     "Md Riyasat Hossain <TheCodeHeist>"
   ],
+  "description": "A fun interpreter for the Pearson Edexcel Pseudocode language, written in Rust and compiled to WebAssembly for use in web applications.",
   "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheCodeHeist/edx-code"
+  },
   "files": [
     "edx_code_bg.wasm",
     "edx_code.js",
