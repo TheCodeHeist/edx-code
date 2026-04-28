@@ -55,6 +55,9 @@ const TextEditor = ({
           "RETURN",
           "TRUE",
           "FALSE",
+          "AND",
+          "OR",
+          "NOT",
         ],
         typeKeywords: ["REAL", "STRING", "BOOLEAN", "INTEGER"],
         operators: [
@@ -100,6 +103,177 @@ const TextEditor = ({
         },
       });
 
+      monaco.languages.registerCompletionItemProvider("edx", {
+        provideCompletionItems: (model, position) => {
+          const word = model.getWordUntilPosition(position);
+          const range = {
+            startLineNumber: position.lineNumber,
+            endLineNumber: position.lineNumber,
+            startColumn: word.startColumn,
+            endColumn: word.endColumn,
+          };
+
+          const suggestions = [
+            {
+              label: "SET",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "SET ${1:identifier} TO ${0:value}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "SEND",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "SEND ${1:message} TO ${2:device}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "SEND-TO-DISPLAY",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "SEND ${1:message} TO DISPLAY",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "RECEIVE",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText:
+                "RECEIVE ${1:identifier} FROM (${2:type}) ${0:source}",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "RECEIVE-FROM-KEYBOARD",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "RECEIVE ${1:identifier} FROM (STRING) KEYBOARD",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "RECEIVE-INTEGER-FROM-KEYBOARD",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "RECEIVE ${1:identifier} FROM (INTEGER) KEYBOARD",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "RECEIVE-REAL-FROM-KEYBOARD",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "RECEIVE ${1:identifier} FROM (REAL) KEYBOARD",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "RECEIVE-BOOLEAN-FROM-KEYBOARD",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: "RECEIVE ${1:identifier} FROM (BOOLEAN) KEYBOARD",
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "REPEAT",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: [
+                "REPEAT ${1:times} TIMES",
+                "BEGIN",
+                "\t${0:statements}",
+                "END REPEAT",
+              ].join("\n"),
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "IF",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: [
+                "IF ${1:condition} THEN",
+                "\t${0:statements}",
+                "END IF",
+              ].join("\n"),
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "IF-ELSE",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: [
+                "IF ${1:condition} THEN",
+                "\t${2:statements}",
+                "ELSE",
+                "\t${0:else_statements}",
+                "END IF",
+              ].join("\n"),
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "WHILE",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: [
+                "WHILE ${1:condition} DO",
+                "\t${0:statements}",
+                "END WHILE",
+              ].join("\n"),
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "FOR",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: [
+                "FOR ${1:variable} FROM ${2:start} TO ${3:end} DO",
+                "\t${0:statements}",
+                "END FOR",
+              ].join("\n"),
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "PROCEDURE",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: [
+                "PROCEDURE ${1:name}(${2:parameters})",
+                "BEGIN",
+                "\t${0:statements}",
+                "END PROCEDURE",
+              ].join("\n"),
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+            {
+              label: "FUNCTION",
+              kind: monaco.languages.CompletionItemKind.Snippet,
+              insertText: [
+                "FUNCTION ${1:name}(${2:parameters}) RETURNS ${3:type}",
+                "BEGIN",
+                "\t${0:statements}",
+                "END FUNCTION",
+              ].join("\n"),
+              insertTextRules:
+                monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+              range,
+            },
+          ];
+
+          return { suggestions };
+        },
+      });
+
       // monaco.editor.defineTheme("edx", {
       //   base: "vs",
       //   inherit: false,
@@ -124,8 +298,8 @@ const TextEditor = ({
       loading={<CircularSpinner />}
       theme="vs-dark"
       options={{
-        autoClosingBrackets: "never",
-        autoClosingQuotes: "never",
+        autoClosingBrackets: "always",
+        autoClosingQuotes: "always",
         formatOnType: true,
         formatOnPaste: true,
         trimAutoWhitespace: true,
