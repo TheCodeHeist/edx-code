@@ -48,9 +48,7 @@ current_player = "X"
 while True:
   display_board()
 
-  print("Player " + current_player + ", enter your move (1-9): ")
-
-  move = int(input())
+  move = int(input("Player " + current_player + ", enter your move (1-9): "))
 
   if move < 1 or move > 9:
     print("Invalid move. Please try again.")

@@ -106,6 +106,12 @@ pub enum Node {
     input_type: String,
     device: String,
   },
+  ReceiveIOWithPrompt {
+    variable_name: String,
+    input_type: String,
+    device: String,
+    prompt: Expression,
+  },
   IfStatement {
     condition: Expression,
     body: Vec<Node>,
@@ -196,6 +202,18 @@ impl std::fmt::Display for Node {
           f,
           "ReceiveIO: {} ({}) <- {}",
           variable_name, input_type, device
+        )
+      }
+      Node::ReceiveIOWithPrompt {
+        variable_name,
+        input_type,
+        device,
+        prompt,
+      } => {
+        write!(
+          f,
+          "ReceiveIOWithPrompt: {} ({}) <- {} with prompt {}",
+          variable_name, input_type, device, prompt
         )
       }
       Node::IfStatement {
@@ -520,15 +538,42 @@ impl Parser {
               })?,
             }; // <DEVICE>
 
-            self
+            // Check if the previous node in the current scope is a SendIO, and if so, combine it with this ReceiveIO to create a ReceiveIOWithPrompt node instead of a ReceiveIO node
+            // Pop the previous node off the current scope
+            let previous_node = self
               .scopes
               .get_mut(&self.current_scope)
               .unwrap()
-              .push(Node::ReceiveIO {
-                variable_name,
-                input_type,
-                device,
-              });
+              .pop();
+
+            if let Some(Node::SendIO { message, device: _ }) = previous_node {
+              // If the previous node is a SendIO, create a ReceiveIOWithPrompt node
+              self
+                .scopes
+                .get_mut(&self.current_scope)
+                .unwrap()
+                .push(Node::ReceiveIOWithPrompt {
+                  variable_name,
+                  input_type,
+                  device,
+                  prompt: message,
+                });
+            } else {
+              // Otherwise, push a regular ReceiveIO node and put the previous node back on the current scope if it exists
+              if let Some(node) = previous_node {
+                self.scopes.get_mut(&self.current_scope).unwrap().push(node);
+              }
+
+              self
+                .scopes
+                .get_mut(&self.current_scope)
+                .unwrap()
+                .push(Node::ReceiveIO {
+                  variable_name,
+                  input_type,
+                  device,
+                });
+            }
           } else if kw == "IF" {
             // If statement
             // Expecting: IF <expression> THEN <parse(body)>

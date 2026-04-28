@@ -117,6 +117,32 @@ impl PythonTranspiler {
           help: "Currently, only the KEYBOARD device is supported for input. Make sure you are using 'KEYBOARD' as the device in your RECEIVE statement.".into(),
         })?,
       },
+      Node::ReceiveIOWithPrompt { variable_name, input_type, device, prompt } => match device.as_str() {
+        "KEYBOARD" => {
+          let translated_prompt = self.translate_expression(prompt)?;
+
+          let input_func = match input_type.as_str() {
+            "INTEGER" => format!("int(input({}))", translated_prompt),
+            "REAL" => format!("float(input({}))", translated_prompt),
+            "STRING" => format!("input({})", translated_prompt),
+            "BOOLEAN" => format!("input({}).lower() in ['true', '1', 'yes', 'y']", translated_prompt),
+            _ => {
+              return Err(EdxTranspilationError {
+                message: format!("Unsupported input type: {}", input_type),
+                help: "Currently, only INTEGER, REAL, STRING, and BOOLEAN input types are supported for keyboard input. Make sure you are using one of these types in your RECEIVE statement.".into(),
+              })?
+            }
+          };
+
+          self
+            .lines
+            .push(format!("{}{} = {}", self.indent(), variable_name, input_func));
+        }
+        _ => return Err(EdxRuntimeError {
+          message: format!("Unsupported device: {}", device),
+          help: "Currently, only the KEYBOARD device is supported for input. Make sure you are using 'KEYBOARD' as the device in your RECEIVE statement.".into(),
+        })?,
+      },
       Node::IfStatement { condition, body, else_body }  => {
         let translated_condition = self.translate_expression(condition)?;
 
