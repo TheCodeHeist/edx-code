@@ -99,6 +99,7 @@ const TextEditor = ({
             [/\d*\.\d+([eE][\-+]?\d+)?/, "number.float"],
             [/\d+/, "number"],
             [/'([^'\\]|\\.)*'/, "string"],
+            [/"([^"\\]|\\.)*"/, "string"],
           ],
         },
       });

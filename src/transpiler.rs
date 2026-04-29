@@ -344,8 +344,8 @@ impl PythonTranspiler {
         }
       }
       Expression::StrConst(token) => {
-        if let Token::StringLiteral(value) = token {
-          Ok(format!("{:?}", value)) // Using debug formatting to ensure proper escaping of special characters in the string literal
+        if let Token::StringLiteral(value, quote_char) = token {
+          Ok(format!("{}{}{}", quote_char, value, quote_char)) // Using debug formatting to ensure proper escaping of special characters in the string literal
         } else {
           Err(EdxTranspilationError {
             message: "Expected StringLiteral token".into(),

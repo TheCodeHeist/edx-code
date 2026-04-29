@@ -691,7 +691,7 @@ impl Runtime {
         }
       }
       Expression::StrConst(token) => {
-        if let Token::StringLiteral(value) = token {
+        if let Token::StringLiteral(value, _) = token {
           Ok(Reference::StrVar(value))
         } else {
           Err(EdxRuntimeError {

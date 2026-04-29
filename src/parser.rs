@@ -1338,7 +1338,7 @@ impl Parser {
       Token::Identifier(name) => Expression::Identifier(Token::Identifier(name)),
       Token::IntegerNumeric(value) => Expression::IntConst(Token::IntegerNumeric(value)),
       Token::RealNumeric(value) => Expression::RealConst(Token::RealNumeric(value)),
-      Token::StringLiteral(value) => Expression::StrConst(Token::StringLiteral(value)),
+      Token::StringLiteral(value, quote_char) => Expression::StrConst(Token::StringLiteral(value, quote_char)),
       Token::Boolean(value) => Expression::BoolConst(Token::Boolean(value)),
       // Parentheses for grouping
       Token::Operator(OperatorType::LPAREN) => {

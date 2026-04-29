@@ -99,7 +99,7 @@ pub enum Token {
   RealNumeric(f64),
   IntegerNumeric(i64),
   Boolean(bool),
-  StringLiteral(String),
+  StringLiteral(String, char), // The char is the quote character that was used to create the literal, e.g. ' or "
   Type(String),
   Operator(OperatorType),
   Device(String),
@@ -115,7 +115,7 @@ impl std::fmt::Display for Token {
       Token::RealNumeric(value) => write!(f, "{}", value),
       Token::IntegerNumeric(value) => write!(f, "{}", value),
       Token::Boolean(value) => write!(f, "{}", value),
-      Token::StringLiteral(lit) => write!(f, "\"{}\"", lit),
+      Token::StringLiteral(lit, quote_char) => write!(f, "{}{}{}", quote_char, lit, quote_char),
       Token::Operator(op) => write!(f, "{}", op),
       Token::Device(dev) => write!(f, "Device({})", dev),
       Token::Type(ty) => write!(f, "Type({})", ty),
@@ -129,7 +129,7 @@ pub enum TokenizerState {
   Default,
   InNumber,
   InWord,
-  InLiteral,
+  InLiteral(char), // The char is the quote character that started the literal, e.g. ' or "
 }
 
 pub struct Lexer {
@@ -174,7 +174,10 @@ impl Lexer {
           } else if current_char.is_digit(10) {
             self.state = TokenizerState::InNumber;
           } else if current_char == '\'' {
-            self.state = TokenizerState::InLiteral;
+            self.state = TokenizerState::InLiteral('\'');
+            self.position += 1; // Skip the opening quote
+          } else if current_char == '"' {
+            self.state = TokenizerState::InLiteral('"');
             self.position += 1; // Skip the opening quote
           } else if "<>".contains(current_char) {
             // Handle two-character operators
@@ -328,16 +331,16 @@ impl Lexer {
           }
           self.state = TokenizerState::Default;
         }
-        TokenizerState::InLiteral => {
+        TokenizerState::InLiteral(quote_char) => {
           let start_pos = self.position;
           while self.position < self.source.len()
-            && self.source.chars().nth(self.position).unwrap() != '\''
+            && self.source.chars().nth(self.position).unwrap() != quote_char
           {
             // If we reached the a newline before finding a closing quote, it's an error
             if self.source.chars().nth(self.position).unwrap() == '\n' {
               Err(EdxSyntaxError {
                 message: "Unterminated string literal".to_string(),
-                help: "I guess you forgot the single quote?".to_string(),
+                help: "I guess you forgot the quote?".to_string(),
                 src: NamedSource::new(self.filename.clone(), self.source.clone()),
                 span: (start_pos, self.position - start_pos).into(),
               })?;
@@ -349,14 +352,14 @@ impl Lexer {
           if self.position >= self.source.len() {
             Err(EdxSyntaxError {
               message: "Unterminated string literal".to_string(),
-              help: "I guess you forgot the single quote?".to_string(),
+              help: "I guess you forgot the quote?".to_string(),
               src: NamedSource::new(self.filename.clone(), self.source.clone()),
               span: (start_pos, self.position - start_pos).into(),
             })?;
           }
 
           let literal: String = self.source[start_pos..self.position].to_string();
-          self.tokens.push(Token::StringLiteral(literal));
+          self.tokens.push(Token::StringLiteral(literal, quote_char));
           self.position += 1; // Skip the closing quote
           self.state = TokenizerState::Default;
         }

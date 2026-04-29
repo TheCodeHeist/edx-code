@@ -1,0 +1,6 @@
+SET message TO "Hello, World!"
+SEND message TO DISPLAY
+SET quote_message TO 'She said, "Hello!"'
+SEND quote_message TO DISPLAY
+SET mixed_quote_message TO "It's a nice day!"
+SEND mixed_quote_message TO DISPLAY

@@ -1,17 +1,17 @@
-print("+------------------------+")
+print('+------------------------+')
 
-print("| Welcome to Tic Tac Toe |")
+print('| Welcome to Tic Tac Toe |')
 
-print("+------------------------+")
+print('+------------------------+')
 
-board = [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"]]
+board = [['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9']]
 
 def display_board():
   for row in board:
-    row_string = ""
+    row_string = ''
 
     for cell in row:
-      row_string = row_string + cell + " "
+      row_string = row_string + cell + ' '
 
     print(row_string)
 
@@ -37,21 +37,21 @@ def check_win():
 def check_draw():
   for row in board:
     for cell in row:
-      if cell != "X" and cell != "O":
+      if cell != 'X' and cell != 'O':
         return False
 
   return True
 
 
-current_player = "X"
+current_player = 'X'
 
 while True:
   display_board()
 
-  move = int(input("Player " + current_player + ", enter your move (1-9): "))
+  move = int(input('Player ' + current_player + ', enter your move (1-9): '))
 
   if move < 1 or move > 9:
-    print("Invalid move. Please try again.")
+    print('Invalid move. Please try again.')
 
     continue
 
@@ -59,8 +59,8 @@ while True:
 
   col = (move - 1) % 3
 
-  if board[row][col] == "X" or board[row][col] == "O":
-    print("Cell already occupied. Please try again.")
+  if board[row][col] == 'X' or board[row][col] == 'O':
+    print('Cell already occupied. Please try again.')
 
     continue
 
@@ -69,19 +69,19 @@ while True:
   if check_win():
     display_board()
 
-    print("Player " + current_player + " wins!")
+    print('Player ' + current_player + ' wins!')
 
     break
 
   if check_draw():
     display_board()
 
-    print("Game is a draw!")
+    print('Game is a draw!')
 
     break
 
-  if current_player == "X":
-    current_player = "O"
+  if current_player == 'X':
+    current_player = 'O'
 
   else:
-    current_player = "X"
+    current_player = 'X'
